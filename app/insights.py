@@ -34,55 +34,62 @@ class InsightReport(BaseModel):
     insights: list[Insight]
 
 
-_series = {
-    "type": "object",
-    "properties": {"metric": {"type": "string", "enum": sorted(metrics.METRICS)}, "label": {"type": "string"}},
-    "required": ["metric"],
-    "additionalProperties": False,
-}
-_chart = {
-    "type": "object",
-    "properties": {
-        "title": {"type": "string"},
-        "type": {"type": "string", "enum": ["line", "bar"]},
-        "series": {"type": "array", "items": _series, "minItems": 1, "maxItems": 3},
-        "days": {"type": "integer"},
-    },
-    "required": ["title", "type", "series", "days"],
-    "additionalProperties": False,
-}
-SCHEMA = {
-    "type": "object",
-    "properties": {
-        "headline": {"type": "string"},
-        "insights": {
-            "type": "array",
-            "minItems": 3,
-            "maxItems": 7,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "body": {"type": "string"},
-                    "category": {"type": "string", "enum": ["training", "recovery", "sleep", "fitness", "health"]},
-                    "severity": {"type": "string", "enum": ["positive", "info", "watch", "concern"]},
-                    "evidence": {"type": "string"},
-                    "chart": _chart,
+def schema(metric_keys: list[str]) -> dict:
+    """Report schema; charts can only use metrics that have data."""
+    _series = {
+        "type": "object",
+        "properties": {"metric": {"type": "string", "enum": sorted(metric_keys)}, "label": {"type": "string"}},
+        "required": ["metric"],
+        "additionalProperties": False,
+    }
+    _chart = {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "type": {"type": "string", "enum": ["line", "bar"]},
+            "series": {"type": "array", "items": _series, "minItems": 1, "maxItems": 3},
+            "days": {"type": "integer"},
+        },
+        "required": ["title", "type", "series", "days"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "headline": {"type": "string"},
+            "insights": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 7,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "body": {"type": "string"},
+                        "category": {"type": "string", "enum": ["training", "recovery", "sleep", "fitness", "health"]},
+                        "severity": {"type": "string", "enum": ["positive", "info", "watch", "concern"]},
+                        "evidence": {"type": "string"},
+                        "chart": _chart,
+                    },
+                    "required": ["title", "body", "category", "severity", "evidence"],
+                    "additionalProperties": False,
                 },
-                "required": ["title", "body", "category", "severity", "evidence"],
-                "additionalProperties": False,
             },
         },
-    },
-    "required": ["headline", "insights"],
-    "additionalProperties": False,
-}
+        "required": ["headline", "insights"],
+        "additionalProperties": False,
+    }
+
 
 PROMPT = """Review my last {days} days of Garmin data (summary below) and give me 3-7 insights.
 
-Look for: training load trend and ramp rate, recovery signals (HRV, resting HR, sleep, stress) and how
-they respond to load, current form (TSB), fitness direction (CTL, VO2 max), consistency, and anything
-unusual in the last two weeks. You may call the healthdb tools to check details before answering.
+Look for: training load trend and ramp rate, current form (TSB), fitness direction (CTL, VO2 max),
+consistency, and anything unusual in the last two weeks. Include recovery signals and how they respond to
+load, using only the metrics that were recorded. You may call the healthdb tools to check details first.
+
+data_coverage shows how complete each watch metric is. A gap means not recorded, not incomplete data, a zero
+or a problem. Don't write insights about metrics under not_recorded, don't advise me to record more data, and
+be cautious with metrics that only cover part of the period.
 
 For each insight:
 - title: short and specific
@@ -110,12 +117,14 @@ def _extract(result_event: dict) -> dict:
 async def generate(days: int = 90) -> dict:
     conn = db.connect()
     summary = metrics.summary_for_claude(conn, days)
-    prompt = PROMPT.format(days=days, metric_keys=", ".join(sorted(metrics.METRICS)),
+    metric_keys = sorted(metrics.available_metrics(conn, days))
+    prompt = PROMPT.format(days=days, metric_keys=", ".join(metric_keys),
                            summary=json.dumps(summary, separators=(",", ":")))
     last_error = None
     for _attempt in range(2):
         result = None
-        async with aclosing(claude_cli.run(prompt, kind="insights", json_schema=SCHEMA, persist=False)) as events:
+        async with aclosing(claude_cli.run(prompt, kind="insights", json_schema=schema(metric_keys),
+                                               persist=False)) as events:
             async for ev in events:
                 if ev.get("type") == "result":
                     result = ev
@@ -135,7 +144,9 @@ async def generate(days: int = 90) -> dict:
 
     for ins in report["insights"]:
         if ins.get("chart"):
-            ins["chart_data"] = metrics.chart_data(conn, ins["chart"])
+            data = metrics.chart_data(conn, ins["chart"])
+            if data["series"]:
+                ins["chart_data"] = data
     report["period"] = summary["period"]
     conn.execute("INSERT INTO insights (payload_json) VALUES (?)", (json.dumps(report),))
     conn.commit()

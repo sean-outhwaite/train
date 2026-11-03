@@ -70,6 +70,16 @@ def get_metric_series(metric: str, days: int = 90) -> str:
         raise ToolError(str(e)) from e
 
 
+@server.tool()
+def get_data_coverage(days: int = 90) -> str:
+    """How many of the last `days` days (7-365) have data for each watch-measured metric, as JSON.
+
+    A metric with 0 days was not recorded. Training metrics (load, distance_km, duration_min, ctl, atl,
+    tsb) come from activities and aren't listed.
+    """
+    return json.dumps(metrics.coverage(db.connect_readonly(), max(7, min(days, 365))))
+
+
 class SeriesRef(BaseModel):
     metric: str = Field(description="One of the metric keys listed in get_metric_series")
     label: str | None = Field(default=None, description="Optional legend label")
@@ -90,6 +100,10 @@ def show_chart(
     unknown = [s.metric for s in series if s.metric not in metrics.METRICS]
     if unknown:
         raise ToolError(f"Unknown metrics {unknown}. Valid: {sorted(metrics.METRICS)}")
+    available = metrics.available_metrics(db.connect_readonly(), max(7, min(days, 365)))
+    empty = [s.metric for s in series if s.metric not in available]
+    if empty:
+        raise ToolError(f"No data recorded for {empty} in this period. Available: {sorted(available)}")
     return "Chart displayed to the user."
 
 

@@ -24,6 +24,11 @@ METRICS: dict[str, dict] = {
 }
 
 
+# Measured by the watch, so these only exist for times it was worn. The rest are derived from activities.
+WELLNESS_METRICS = ["resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg", "steps",
+                    "body_battery_high", "body_battery_low", "vo2max"]
+
+
 def _activity_load(a: sqlite3.Row, rest_hr: float, max_hr: float) -> float:
     """Banister TRIMP from average HR; falls back to a duration estimate."""
     minutes = (a["duration_s"] or 0) / 60
@@ -100,6 +105,22 @@ def _last_data_day(conn: sqlite3.Connection) -> date:
     return date.fromisoformat(r) if r else date.today()
 
 
+def coverage(conn: sqlite3.Connection, days: int = 90) -> dict:
+    """How complete each watch-measured metric is over the last `days` days."""
+    frame = daily_frame(conn, days)
+    out = {}
+    for m in WELLNESS_METRICS:
+        dates = [r["date"] for r in frame if r[m] is not None]
+        out[m] = {"days_with_data": len(dates), "last_date": dates[-1] if dates else None}
+    return {"days": len(frame), "metrics": out}
+
+
+def available_metrics(conn: sqlite3.Connection, days: int = 90) -> list[str]:
+    """Metric keys with something to show. Derived training metrics are always available."""
+    cov = coverage(conn, days)["metrics"]
+    return [m for m in METRICS if m not in cov or cov[m]["days_with_data"] > 0]
+
+
 def series(conn: sqlite3.Connection, metric: str, days: int = 90) -> dict:
     if metric not in METRICS:
         raise ValueError(f"unknown metric {metric!r}; choose from {sorted(METRICS)}")
@@ -142,19 +163,28 @@ def kpis(conn: sqlite3.Connection) -> list[dict]:
         ("sleep_h", "Sleep", "h/night", lambda rows: _mean([r["sleep_h"] for r in rows]), "higher"),
         ("tsb", "Form (TSB)", "", lambda rows: rows[-1]["tsb"] if rows else None, "neutral"),
     ]
-    return [
+    tiles = [
         {"key": k, "label": label, "unit": unit, "current": fn(cur), "previous": fn(prev), "better": better}
         for k, label, unit, fn, better in spec
     ]
+    return [t for t in tiles if t["current"] is not None or t["previous"] is not None]
+
+
+def _present(row: dict) -> dict:
+    return {k: v for k, v in row.items() if v is not None}
 
 
 def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
-    """Compact, token-cheap snapshot used as context for insight generation."""
+    """Compact, token-cheap snapshot used as context for insight generation.
+
+    Missing values are left out rather than sent as nulls.
+    """
     frame = daily_frame(conn, days)
+    cov = coverage(conn, days)
     weekly = []
     for i in range(0, len(frame), 7):
         chunk = frame[i:i + 7]
-        weekly.append({
+        weekly.append(_present({
             "week_start": chunk[0]["date"],
             "hours": round(sum(r["duration_min"] for r in chunk) / 60, 1),
             "km": round(sum(r["distance_km"] for r in chunk), 1),
@@ -166,9 +196,9 @@ def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
             "stress": _mean([r["stress_avg"] for r in chunk]),
             "ctl_end": chunk[-1]["ctl"],
             "tsb_end": chunk[-1]["tsb"],
-        })
+        }))
     recent = [
-        {k: r[k] for k in ("date", "load", "resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg", "tsb")}
+        _present({k: r[k] for k in ("date", "load", "resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg", "tsb")})
         for r in frame[-14:]
     ]
     acts = [
@@ -182,6 +212,11 @@ def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
     vo2 = [r["vo2max"] for r in frame if r["vo2max"]]
     return {
         "period": {"start": frame[0]["date"], "end": frame[-1]["date"]},
+        "data_coverage": {
+            "days_in_period": cov["days"],
+            "days_with_data": {m: c["days_with_data"] for m, c in cov["metrics"].items() if c["days_with_data"]},
+            "not_recorded": [m for m, c in cov["metrics"].items() if not c["days_with_data"]],
+        },
         "weekly": weekly,
         "last_14_days": recent,
         "recent_activities": acts,
@@ -197,7 +232,7 @@ def chart_data(conn: sqlite3.Connection, spec: dict) -> dict:
     out_series = []
     for s in spec.get("series", []):
         m = s.get("metric")
-        if m in METRICS:
+        if m in METRICS and any(r[m] is not None for r in frame):
             out_series.append({
                 "metric": m,
                 "label": s.get("label") or METRICS[m]["label"],

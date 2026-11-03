@@ -93,11 +93,18 @@ function renderCharts(d) {
     ] },
     options: baseOptions({ unit }),
   });
-  draw("c-rhr", dailyPlusAvg("resting_hr", "Resting HR", "bpm"));
-  draw("c-hrv", dailyPlusAvg("hrv_avg", "HRV", "ms"));
-
-  draw("c-sleep", { data: { labels, datasets: [bar("Sleep", col("sleep_h"), css("--series-1"), { maxBarThickness: 8 })] }, options: singleSeries({ unit: "h" }) });
-  draw("c-stress", { data: { labels, datasets: [line("Stress", col("stress_avg"), css("--series-1"))] }, options: singleSeries() });
+  // Cards for metrics the watch didn't record stay hidden, and come back if data appears.
+  const drawIfData = (id, key, config) => {
+    const canvas = document.getElementById(id);
+    const hasData = col(key).some((v) => v != null);
+    canvas.closest(".chart-card").hidden = !hasData;
+    if (hasData) draw(canvas, config());
+    else { charts.get(canvas)?.destroy(); charts.delete(canvas); }
+  };
+  drawIfData("c-rhr", "resting_hr", () => dailyPlusAvg("resting_hr", "Resting HR", "bpm"));
+  drawIfData("c-hrv", "hrv_avg", () => dailyPlusAvg("hrv_avg", "HRV", "ms"));
+  drawIfData("c-sleep", "sleep_h", () => ({ data: { labels, datasets: [bar("Sleep", col("sleep_h"), css("--series-1"), { maxBarThickness: 8 })] }, options: singleSeries({ unit: "h" }) }));
+  drawIfData("c-stress", "stress_avg", () => ({ data: { labels, datasets: [line("Stress", col("stress_avg"), css("--series-1"))] }, options: singleSeries() }));
 }
 
 // Claude-authored chart specs: one panel per unit, sharing the time axis (never dual-axis).

@@ -49,6 +49,11 @@ uvicorn app.main:app --reload      # http://localhost:8000
 
 Set `CLAUDE_MODEL=sonnet` (or `opus`) in `.env` to choose the model. The default is your Claude Code default.
 
+## Missing data
+
+The watch only records what it's worn for. Charts and tiles with no data are hidden and return if data
+appears. Claude is told how complete each metric is, and treats gaps as "not recorded".
+
 ## Token safeguards
 
 Only one Claude run happens at a time, and closing the page stops a chat run in progress. These limits apply,
