@@ -1,5 +1,6 @@
 """Insight generation: metrics summary -> headless Claude -> validated InsightReport."""
 import json
+from contextlib import aclosing
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError
@@ -114,11 +115,12 @@ async def generate(days: int = 90) -> dict:
     last_error = None
     for _attempt in range(2):
         result = None
-        async for ev in claude_cli.run(prompt, json_schema=SCHEMA, persist=False):
-            if ev.get("type") == "result":
-                result = ev
-            elif ev.get("type") == "error":
-                last_error = ev["message"]
+        async with aclosing(claude_cli.run(prompt, kind="insights", json_schema=SCHEMA, persist=False)) as events:
+            async for ev in events:
+                if ev.get("type") == "result":
+                    result = ev
+                elif ev.get("type") == "error":
+                    last_error = ev["message"]
         if result is None:
             raise RuntimeError(last_error or "Claude returned no result")
         if result.get("is_error"):

@@ -5,6 +5,8 @@ const charts = new Map(); // canvas id/element -> Chart
 let dashData = null;
 let insightData = null;
 let conversationId = null;
+let sending = false;
+let discoverTried = false;
 
 // Colour follows the entity: each sport keeps its slot no matter which sports are present.
 const SPORT_SLOT = { running: 1, cycling: 2, strength: 3, swimming: 4, walking: 5, other: 6 };
@@ -210,6 +212,7 @@ async function generateInsights() {
   } finally {
     btn.disabled = false;
     btn.textContent = "Regenerate insights";
+    loadStatus();
   }
 }
 
@@ -231,7 +234,8 @@ function renderMarkdown(el, text) {
 
 async function sendMessage(text) {
   text = text.trim();
-  if (!text) return;
+  if (!text || sending) return;
+  sending = true;
   const messages = $("#messages");
   messages.querySelector(".hint")?.remove();
   messages.insertAdjacentHTML("beforeend", `<div class="msg user">${escapeHtml(text)}</div>`);
@@ -290,16 +294,20 @@ async function sendMessage(text) {
           scroll();
         } else if (event === "error") {
           breakSegment();
+          status.remove();
           reply.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(data.message || "Something went wrong")}</p>`);
         }
       }
     }
   } catch (e) {
+    status.remove();
     reply.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(e.message)}</p>`);
   } finally {
     breakSegment();
     if (status.textContent.endsWith("…") && status.isConnected && reply.lastChild === status) status.remove();
+    sending = false;
     $("#btn-send").disabled = false;
+    loadStatus();
   }
 }
 
@@ -314,14 +322,18 @@ async function loadStatus() {
   const pill = (ok, text) => `<span class="pill"><span class="dot" style="background:${css(ok ? "--good" : "--warning")}"></span>${text}</span>`;
   $("#pills").innerHTML = [
     pill(s.claude.ok, s.claude.ok ? "Claude connected" : "Claude logged out"),
+    pill(s.usage.runs < s.usage.limit, `${s.usage.runs}/${s.usage.limit} Claude runs today · ${fmtTokens(s.usage.tokens_in + s.usage.tokens_out)} tokens`),
     pill(s.data.activities > 0, `${s.data.activities} activities · ${s.data.days} days${s.data.demo ? " (demo data)" : ""}`),
     pill(s.strava.tools > 0, s.strava.tools > 0 ? "Strava connector in chat" : "Strava connector not found"),
   ].join("");
   if (!s.claude.ok) showBanner(`<b>Claude:</b> ${escapeHtml(s.claude.message)} Charts still work; insights and chat need it.`);
-  if (s.claude.ok && !s.strava.discovered) {
+  if (s.claude.ok && !s.strava.discovered && !discoverTried) {
+    discoverTried = true; // once per page load, even if it fails
     api("/api/claude/discover", { method: "POST" }).then(loadStatus).catch(() => {});
   }
 }
+
+const fmtTokens = (n) => (n >= 1000 ? `${fmtNum(n / 1000, 1)}k` : String(n));
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -334,6 +346,7 @@ $("#btn-close").addEventListener("click", () => openDrawer(false));
 $("#btn-newchat").addEventListener("click", newChat);
 $("#composer").addEventListener("submit", (e) => {
   e.preventDefault();
+  if (sending) return;
   const text = $("#input").value;
   $("#input").value = "";
   sendMessage(text);
@@ -343,7 +356,7 @@ $("#input").addEventListener("keydown", (e) => {
 });
 $("#insights").addEventListener("click", (e) => {
   const btn = e.target.closest(".ask");
-  if (!btn) return;
+  if (!btn || sending) return;
   const ins = insightData.insights[btn.dataset.i];
   newChat();
   openDrawer(true);

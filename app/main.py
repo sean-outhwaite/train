@@ -4,6 +4,7 @@
 """
 import json
 import uuid
+from contextlib import aclosing
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -13,14 +14,23 @@ from pydantic import BaseModel
 
 from . import claude_cli, db, garmin_import, garmin_sync, insights, metrics
 
+class RevalidatedStaticFiles(StaticFiles):
+    """Make browsers re-check files, so a stale app.js can't bypass the client-side guards."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 app = FastAPI(title="Health Dash")
 STATIC = db.ROOT / "static"
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.mount("/static", RevalidatedStaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html")
+    return FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/status")
@@ -33,6 +43,7 @@ async def status():
     strava = json.loads(claude_cli.STRAVA_CACHE.read_text()) if claude_cli.STRAVA_CACHE.exists() else None
     return {
         "claude": await claude_cli.auth_status(),
+        "usage": claude_cli.usage(),
         "data": {"activities": counts["acts"], "days": counts["days"], "demo": counts["demo"] > 0,
                  "latest": db.latest_date(conn)},
         "strava": {"discovered": strava is not None, "tools": len(strava["strava_tools"]) if strava else 0},
@@ -92,13 +103,18 @@ def get_insights():
 async def make_insights():
     try:
         return await insights.generate()
+    except claude_cli.RunRejected as e:
+        raise HTTPException(429, str(e)) from e
     except Exception as e:
         raise HTTPException(502, str(e)) from e
 
 
 @app.post("/api/claude/discover")
 async def discover():
-    return await claude_cli.discover_tools()
+    try:
+        return await claude_cli.discover_tools()
+    except claude_cli.RunRejected as e:
+        raise HTTPException(429, str(e)) from e
 
 
 class ChatRequest(BaseModel):
@@ -138,39 +154,44 @@ async def chat(req: ChatRequest):
     async def stream():
         yield _sse("conversation", {"id": conv_id})
         streamed_text, need_gap = False, False
-        async for ev in claude_cli.run(req.message, resume=resume):
-            kind = ev.get("type")
-            if kind == "system" and ev.get("subtype") == "init":
-                save_session(ev.get("session_id"))
-            elif kind == "stream_event":
-                inner = ev.get("event", {})
-                if inner.get("type") == "message_start" and streamed_text:
-                    need_gap = True
-                elif inner.get("type") == "content_block_delta" and inner.get("delta", {}).get("type") == "text_delta":
-                    text = inner["delta"]["text"]
-                    if need_gap:
-                        text, need_gap = "\n\n" + text, False
-                    streamed_text = True
-                    yield _sse("text", {"delta": text})
-            elif kind == "assistant":
-                for block in ev.get("message", {}).get("content", []):
-                    if block.get("type") != "tool_use":
-                        continue
-                    name = block.get("name", "")
-                    yield _sse("status", {"text": _status_for_tool(name)})
-                    if name.endswith("__show_chart"):
-                        try:
-                            yield _sse("chart", metrics.chart_data(db.connect(), block.get("input") or {}))
-                        except Exception as e:
-                            yield _sse("status", {"text": f"Chart failed: {e}"})
-            elif kind == "result":
-                save_session(ev.get("session_id"))
-                if ev.get("is_error"):
-                    yield _sse("error", {"message": ev.get("result") or ev.get("subtype")})
-                elif not streamed_text and ev.get("result"):
-                    yield _sse("text", {"delta": ev["result"]})
-            elif kind == "error":
-                yield _sse("error", {"message": ev["message"]})
+        try:
+            async with aclosing(claude_cli.run(req.message, kind="chat", conversation_id=conv_id,
+                                               resume=resume)) as events:
+                async for ev in events:
+                    kind = ev.get("type")
+                    if kind == "system" and ev.get("subtype") == "init":
+                        save_session(ev.get("session_id"))
+                    elif kind == "stream_event":
+                        inner = ev.get("event", {})
+                        if inner.get("type") == "message_start" and streamed_text:
+                            need_gap = True
+                        elif inner.get("type") == "content_block_delta" and inner.get("delta", {}).get("type") == "text_delta":
+                            text = inner["delta"]["text"]
+                            if need_gap:
+                                text, need_gap = "\n\n" + text, False
+                            streamed_text = True
+                            yield _sse("text", {"delta": text})
+                    elif kind == "assistant":
+                        for block in ev.get("message", {}).get("content", []):
+                            if block.get("type") != "tool_use":
+                                continue
+                            name = block.get("name", "")
+                            yield _sse("status", {"text": _status_for_tool(name)})
+                            if name.endswith("__show_chart"):
+                                try:
+                                    yield _sse("chart", metrics.chart_data(db.connect(), block.get("input") or {}))
+                                except Exception as e:
+                                    yield _sse("status", {"text": f"Chart failed: {e}"})
+                    elif kind == "result":
+                        save_session(ev.get("session_id"))
+                        if ev.get("is_error"):
+                            yield _sse("error", {"message": ev.get("result") or ev.get("subtype")})
+                        elif not streamed_text and ev.get("result"):
+                            yield _sse("text", {"delta": ev["result"]})
+                    elif kind == "error":
+                        yield _sse("error", {"message": ev["message"]})
+        except claude_cli.RunRejected as e:
+            yield _sse("error", {"message": str(e)})
         yield _sse("done", {})
 
     return StreamingResponse(stream(), media_type="text/event-stream",

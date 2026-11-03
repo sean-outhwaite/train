@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS conversations (
     title             TEXT,
     created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- One row per `claude` subprocess, written before it starts so killed runs still count.
+CREATE TABLE IF NOT EXISTS claude_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    kind            TEXT NOT NULL,          -- chat, insights, discover
+    conversation_id TEXT,
+    status          TEXT NOT NULL DEFAULT 'running',
+    input_tokens    INTEGER,                -- includes cache reads and writes
+    output_tokens   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_claude_runs_started ON claude_runs(started_at);
 """
 
 ACTIVITY_COLS = [
@@ -94,6 +106,43 @@ def upsert_daily(conn: sqlite3.Connection, row: dict) -> None:
         f"ON CONFLICT(date) DO UPDATE SET {updates}",
         [row[c] for c in cols],
     )
+
+
+def start_run(kind: str, conversation_id: str | None = None) -> int:
+    conn = connect()
+    cur = conn.execute("INSERT INTO claude_runs (kind, conversation_id) VALUES (?, ?)", (kind, conversation_id))
+    conn.commit()
+    return cur.lastrowid
+
+
+def finish_run(run_id: int, status: str, usage: dict | None = None) -> None:
+    usage = usage or {}
+    tokens_in = sum(usage.get(k) or 0 for k in
+                    ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    conn = connect()
+    conn.execute("UPDATE claude_runs SET status = ?, input_tokens = ?, output_tokens = ? WHERE id = ?",
+                 (status, tokens_in, usage.get("output_tokens") or 0, run_id))
+    conn.commit()
+
+
+def usage_today() -> dict:
+    r = connect().execute(
+        "SELECT COUNT(*) runs, COALESCE(SUM(input_tokens), 0) tokens_in, COALESCE(SUM(output_tokens), 0) tokens_out "
+        "FROM claude_runs WHERE date(started_at, 'localtime') = date('now', 'localtime')"
+    ).fetchone()
+    return dict(r)
+
+
+def conversation_turns(conversation_id: str) -> int:
+    return connect().execute("SELECT COUNT(*) FROM claude_runs WHERE conversation_id = ?",
+                             (conversation_id,)).fetchone()[0]
+
+
+def recent_discover_attempt(minutes: int) -> bool:
+    return connect().execute(
+        "SELECT 1 FROM claude_runs WHERE kind = 'discover' AND started_at >= datetime('now', ?) LIMIT 1",
+        (f"-{minutes} minutes",),
+    ).fetchone() is not None
 
 
 def latest_date(conn: sqlite3.Connection) -> str | None:

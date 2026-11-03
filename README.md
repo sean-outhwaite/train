@@ -48,3 +48,18 @@ uvicorn app.main:app --reload      # http://localhost:8000
 | `app/main.py` | FastAPI routes; chat is streamed to the browser as server-sent events |
 
 Set `CLAUDE_MODEL=sonnet` (or `opus`) in `.env` to choose the model. The default is your Claude Code default.
+
+## Token safeguards
+
+Only one Claude run happens at a time, and closing the page stops a chat run in progress. These limits apply,
+and each can be changed in `.env`:
+
+| Setting | Default | What happens |
+|---|---|---|
+| `CLAUDE_DAILY_RUN_LIMIT` | 30 | New runs are refused for the rest of the local day |
+| `CLAUDE_MAX_TOOL_CALLS` | 15 | The run is stopped after passing this many tool calls |
+| `CLAUDE_RUN_TIMEOUT_S` | 240 | The run is stopped after this many seconds |
+| `CLAUDE_MAX_CHAT_TURNS` | 20 | That chat refuses new messages; start a new one |
+
+`ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are removed from the environment passed to `claude`, so usage
+can't move from your plan to an API bill. The header shows today's run count and tokens.
