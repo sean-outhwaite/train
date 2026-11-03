@@ -1,4 +1,4 @@
-# Health Dash
+# TrAIn
 
 A local dashboard for your Garmin data. It has charts, AI insights and a chat that can drill into them.
 Claude runs through your logged-in **Claude Code** CLI (`claude -p`), so usage counts toward your Claude plan

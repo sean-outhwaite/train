@@ -23,7 +23,7 @@ class RevalidatedStaticFiles(StaticFiles):
         return response
 
 
-app = FastAPI(title="Health Dash")
+app = FastAPI(title="TrAIn")
 STATIC = db.ROOT / "static"
 app.mount("/static", RevalidatedStaticFiles(directory=STATIC), name="static")
 

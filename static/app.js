@@ -1,4 +1,4 @@
-// Health Dash front end: plain JS + Chart.js. Colours come from CSS tokens so light/dark both work.
+// TrAIn front end: plain JS + Chart.js. Colours come from CSS tokens so light/dark both work.
 const $ = (sel) => document.querySelector(sel);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const charts = new Map(); // canvas id/element -> Chart
