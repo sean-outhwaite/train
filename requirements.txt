@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+garminconnect>=0.3
+fitparse>=1.2
+pydantic>=2.7
+python-dotenv>=1.0
+mcp>=2.0
