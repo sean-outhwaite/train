@@ -23,7 +23,7 @@ class RevalidatedStaticFiles(StaticFiles):
         return response
 
 
-app = FastAPI(title="TrAIn")
+app = FastAPI(title="trAIn")
 STATIC = db.ROOT / "static"
 app.mount("/static", RevalidatedStaticFiles(directory=STATIC), name="static")
 

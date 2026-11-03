@@ -1,4 +1,4 @@
-# TrAIn
+# trAIn
 
 Local dashboard for personal Garmin data: FastAPI, SQLite and plain JS with Chart.js, with no build step.
 Claude generates insights and answers chat questions. See README.md for setup.
