@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import time
+from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
@@ -22,6 +23,9 @@ CLAUDE = os.getenv("CLAUDE_BIN") or shutil.which("claude") or "claude"
 MODEL = os.getenv("CLAUDE_MODEL")  # optional, e.g. "sonnet"; default = your Claude Code default
 MCP_CONFIG = db.DATA_DIR / "mcp.json"
 STRAVA_CACHE = db.DATA_DIR / "strava_tools.json"
+# Claude Code loads CLAUDE.md from the working directory and its parents, so runs must start outside
+# the project. The path has to stay fixed: --resume finds sessions by working directory.
+RUN_DIR = Path.home() / ".cache" / "train"
 
 # Token safeguards. Each can be overridden in .env.
 DAILY_RUN_LIMIT = int(os.getenv("CLAUDE_DAILY_RUN_LIMIT", "30"))     # all runs, per local day
@@ -80,6 +84,7 @@ How to answer:
 
 def write_mcp_config() -> None:
     db.DATA_DIR.mkdir(exist_ok=True)
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
     script = db.ROOT / "app" / "healthdb_mcp.py"
     MCP_CONFIG.write_text(json.dumps(
         {"mcpServers": {"healthdb": {"type": "stdio", "command": sys.executable, "args": [str(script)]}}},
@@ -149,7 +154,7 @@ async def run(prompt: str, *, kind: str, conversation_id: str | None = None, res
         proc = await asyncio.create_subprocess_exec(
             *_base_args(json_schema, resume, persist),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            cwd=db.DATA_DIR,  # keeps any project CLAUDE.md out of the context
+            cwd=RUN_DIR,
             limit=16 * 1024 * 1024, env=_env(),
         )
         proc.stdin.write(prompt.encode())
@@ -206,7 +211,7 @@ async def discover_tools() -> dict:
         CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--mcp-config", str(MCP_CONFIG),
         "--tools", "", "--no-session-persistence", "--max-turns", "1",
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        cwd=db.DATA_DIR, limit=16 * 1024 * 1024, env=_env(),
+        cwd=RUN_DIR, limit=16 * 1024 * 1024, env=_env(),
     )
     proc.stdin.write(b"Reply with OK.")
     proc.stdin.close()
