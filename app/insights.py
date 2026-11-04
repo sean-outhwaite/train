@@ -87,6 +87,11 @@ Look for: training load trend and ramp rate, current form (TSB), fitness directi
 consistency, and anything unusual in the last two weeks. Include recovery signals and how they respond to
 load, using only the metrics that were recorded. You may call the healthdb tools to check details first.
 
+If Strava tools are available, use get_athlete_best_efforts and get_athlete_zones where they add something
+Garmin lacks. Per-activity Strava tools cost one call each, so use them for two or three notable sessions at
+most, never to go through every activity. Stay under 10 tool calls in total. Say in the evidence when a number
+comes from Strava.
+
 data_coverage shows how complete each watch metric is. A gap means not recorded, not incomplete data, a zero
 or a problem. Don't write insights about metrics under not_recorded, don't advise me to record more data, and
 be cautious with metrics that only cover part of the period.

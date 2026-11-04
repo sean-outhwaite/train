@@ -1,4 +1,6 @@
-"""SQLite storage. All Garmin data lives here; Strava data is never stored."""
+"""SQLite storage. All Garmin data lives here. Strava data is not stored, apart from figures Claude
+quotes in saved insight reports."""
+import json
 import sqlite3
 from pathlib import Path
 
@@ -58,7 +60,8 @@ CREATE TABLE IF NOT EXISTS claude_runs (
     conversation_id TEXT,
     status          TEXT NOT NULL DEFAULT 'running',
     input_tokens    INTEGER,                -- includes cache reads and writes
-    output_tokens   INTEGER
+    output_tokens   INTEGER,
+    tools_json      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_claude_runs_started ON claude_runs(started_at);
 """
@@ -78,6 +81,8 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    if "tools_json" not in {r["name"] for r in conn.execute("PRAGMA table_info(claude_runs)")}:
+        conn.execute("ALTER TABLE claude_runs ADD COLUMN tools_json TEXT")
     return conn
 
 
@@ -115,13 +120,13 @@ def start_run(kind: str, conversation_id: str | None = None) -> int:
     return cur.lastrowid
 
 
-def finish_run(run_id: int, status: str, usage: dict | None = None) -> None:
+def finish_run(run_id: int, status: str, usage: dict | None = None, tools: list[str] | None = None) -> None:
     usage = usage or {}
     tokens_in = sum(usage.get(k) or 0 for k in
                     ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
     conn = connect()
-    conn.execute("UPDATE claude_runs SET status = ?, input_tokens = ?, output_tokens = ? WHERE id = ?",
-                 (status, tokens_in, usage.get("output_tokens") or 0, run_id))
+    conn.execute("UPDATE claude_runs SET status = ?, input_tokens = ?, output_tokens = ?, tools_json = ? WHERE id = ?",
+                 (status, tokens_in, usage.get("output_tokens") or 0, json.dumps(tools or []), run_id))
     conn.commit()
 
 

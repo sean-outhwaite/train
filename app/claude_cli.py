@@ -149,7 +149,7 @@ async def run(prompt: str, *, kind: str, conversation_id: str | None = None, res
     async with _run_lock:
         write_mcp_config()
         run_id = db.start_run(kind, conversation_id)
-        status, run_usage, tool_calls = "killed", None, 0
+        status, run_usage, tool_calls = "killed", None, {}  # tool_calls: id -> name
         deadline = time.monotonic() + RUN_TIMEOUT_S
         proc = await asyncio.create_subprocess_exec(
             *_base_args(json_schema, resume, persist),
@@ -179,8 +179,9 @@ async def run(prompt: str, *, kind: str, conversation_id: str | None = None, res
                     status = "error" if ev.get("is_error") else "ok"
                 yield ev
                 if ev.get("type") == "assistant":
-                    tool_calls += sum(b.get("type") == "tool_use" for b in ev.get("message", {}).get("content", []))
-                    if tool_calls > MAX_TOOL_CALLS:
+                    tool_calls.update({b["id"]: b["name"] for b in ev.get("message", {}).get("content", [])
+                                       if b.get("type") == "tool_use"})
+                    if len(tool_calls) > MAX_TOOL_CALLS:
                         status = "tool_limit"
                         yield {"type": "error", "message": f"Stopped: Claude passed the limit of {MAX_TOOL_CALLS} "
                                                            "tool calls for one run."}
@@ -194,7 +195,7 @@ async def run(prompt: str, *, kind: str, conversation_id: str | None = None, res
             if proc.returncode is None:
                 proc.kill()
                 await proc.wait()
-            db.finish_run(run_id, status, run_usage)
+            db.finish_run(run_id, status, run_usage, list(tool_calls.values()))
 
 
 async def discover_tools() -> dict:

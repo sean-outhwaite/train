@@ -331,7 +331,7 @@ async function loadStatus() {
     pill(s.claude.ok, s.claude.ok ? "Claude connected" : "Claude logged out"),
     pill(s.usage.runs < s.usage.limit, `${s.usage.runs}/${s.usage.limit} Claude runs today · ${fmtTokens(s.usage.tokens_in + s.usage.tokens_out)} tokens`),
     pill(s.data.activities > 0, `${s.data.activities} activities · ${s.data.days} days${s.data.demo ? " (demo data)" : ""}`),
-    pill(s.strava.tools > 0, s.strava.tools > 0 ? "Strava connector in chat" : "Strava connector not found"),
+    pill(s.strava.tools > 0, s.strava.tools > 0 ? "Strava connector" : "Strava connector not found"),
   ].join("");
   if (!s.claude.ok) showBanner(`<b>Claude:</b> ${escapeHtml(s.claude.message)} Charts still work; insights and chat need it.`);
   if (s.claude.ok && !s.strava.discovered && !discoverTried) {

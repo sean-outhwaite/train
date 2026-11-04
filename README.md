@@ -4,10 +4,13 @@ A local dashboard for your Garmin data. It has charts, AI insights and a chat th
 Claude runs through your logged-in **Claude Code** CLI (`claude -p`), so usage counts toward your Claude plan
 and you don't need an API key.
 
-- **Charts and insights** use your Garmin history, stored locally in `data/health.db`.
+- **Charts** use your Garmin history, stored locally in `data/health.db`.
+- **Insights** use that history too, and can check your claude.ai **Strava connector** for things like best
+  efforts and zones.
 - **Chat** can query that database, draw charts inline, and use your claude.ai **Strava connector** for
-  Strava-only detail (segments, kudos, Relative Effort, gear). Strava data is never stored, which keeps
-  the app within Strava's API policy.
+  Strava-only detail (segments, kudos, Relative Effort, gear). Strava is only reached through that connector,
+  because Strava's API policy bans AI use of API data. Strava data isn't stored, apart from any figures
+  quoted in saved insight reports.
 
 ## Setup
 

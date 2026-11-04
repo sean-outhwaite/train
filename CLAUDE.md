@@ -16,8 +16,9 @@ Claude generates insights and answers chat questions. See README.md for setup.
 
 ## Rules
 
-- **Strava:** never use the Strava API or store Strava data. Strava's API policy bans AI use of API data, so
-  Strava is only reached live through the Strava MCP connector in chat.
+- **Strava:** never use the Strava API. Strava's API policy bans AI use of API data, so Strava is only reached
+  live through the Strava MCP connector, in chat and insights. Don't store Strava data in the database. Saved
+  insight reports are the one exception, because they can quote figures from it.
 - **Claude access:** Claude runs through `claude -p` so usage stays on the Claude plan. Don't add the Anthropic
   API or an API key. Every call goes through `app/claude_cli.py` so the safeguards apply.
 - **Run directory:** Claude runs start in `~/.cache/train`, outside the project, so this file doesn't reach
