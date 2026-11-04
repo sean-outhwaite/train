@@ -28,7 +28,7 @@ python -m app.seed                 # demo data, to try the UI (remove with: pyth
 
 - **Garmin export (official):** request your data at Garmin Connect → Account → Data Management →
   Export Your Data. Unzip it, then run `python -m app.garmin_import ~/Downloads/<export-folder>`
-  or use **Import export…** in the UI.
+  or use **Manual import** in the UI.
 - **Live Garmin sync (unofficial `garminconnect` library, a grey area under Garmin's terms):** copy
   `.env.example` to `.env`, fill in `GARMIN_EMAIL`/`GARMIN_PASSWORD`, and run
   `python -m app.garmin_sync --login` once in a terminal (this handles MFA). After that the **Sync Garmin**

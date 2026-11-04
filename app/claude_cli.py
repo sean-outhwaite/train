@@ -108,6 +108,18 @@ async def auth_status() -> dict:
     return {"ok": True, "method": status.get("authMethod")}
 
 
+def tool_status(name: str) -> str:
+    """A short progress line for a tool call, shown while a run is working."""
+    if name == "StructuredOutput":  # how --json-schema hands back the final answer
+        return "Writing up the results…"
+    if name.startswith("mcp__healthdb__"):
+        return {"query_data": "Querying your Garmin data…", "get_metric_series": "Pulling a metric trend…",
+                "show_chart": "Drawing a chart…"}.get(name.split("__")[-1], "Using your Garmin data…")
+    if "strava" in name.lower():
+        return "Checking Strava…"
+    return f"Using {name}…"
+
+
 def _strava_allow() -> list[str]:
     """Allow-rules for the Strava connector, discovered once by discover_tools()."""
     if os.getenv("STRAVA_MCP_SERVER"):

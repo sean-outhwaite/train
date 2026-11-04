@@ -10,6 +10,7 @@
   --grid: #ebeae6;
   --accent: #2a78d6;
   --accent-ink: #ffffff;
+  --logo-line: #d95926;
   /* categorical slots, fixed order */
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
   --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
@@ -23,7 +24,7 @@
     color-scheme: dark;
     --page: #121211; --surface-1: #1a1a19; --surface-2: #232321; --border: #2f2f2c;
     --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --grid: #2a2a27;
-    --accent: #3987e5;
+    --accent: #3987e5; --logo-line: #eb6834;
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
     --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
   }
@@ -32,7 +33,7 @@
   color-scheme: dark;
   --page: #121211; --surface-1: #1a1a19; --surface-2: #232321; --border: #2f2f2c;
   --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --grid: #2a2a27;
-  --accent: #3987e5;
+  --accent: #3987e5; --logo-line: #eb6834;
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
 }
@@ -48,15 +49,31 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 
 .topbar {
   position: sticky; top: 0; z-index: 5;
-  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
-  padding: 12px 24px; background: var(--surface-1); border-bottom: 1px solid var(--border);
+  display: flex; gap: 8px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  padding: 10px 24px; background: var(--surface-1); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; font-size: 16px; }
-.pills { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+.brand { display: block; height: 32px; width: auto; aspect-ratio: 178 / 34; flex: none; overflow: visible; }
+.brand-word { fill: var(--text-primary); }
+.brand-accent { fill: var(--accent); }
+.brand-line { fill: none; stroke: var(--logo-line); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.brand-train { fill: var(--text-primary); }
+.brand-glass { fill: var(--surface-1); }
 .pill { display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; border-radius: 999px;
   background: var(--surface-2); color: var(--text-secondary); font-size: 12px; }
-.pill .dot { width: 8px; height: 8px; border-radius: 50%; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.status-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 13px; }
+.status-btn:hover { background: var(--surface-2); }
+.status-pop { inset: auto; margin: 0; padding: 10px 14px; max-width: calc(100vw - 32px); border: 1px solid var(--border);
+  border-radius: 10px; background: var(--surface-1); color: var(--text-secondary); font-size: 13px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+.status-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.status-pop li { display: flex; align-items: center; gap: 8px; }
+
+.btn-group { display: inline-flex; }
+.btn-group .btn:first-child { border-radius: 8px 0 0 8px; }
+.btn-group .btn:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
 
 .btn { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
@@ -107,6 +124,31 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .insight .ask { align-self: flex-start; margin-top: auto; }
 .insights-empty { color: var(--text-muted); padding: 8px 0; }
 
+.insight-progress { margin: 4px 0 12px; }
+.progress-now { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.progress-time { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
+.spinner { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border);
+  border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.progress-done { list-style: none; margin: 6px 0 0; padding: 0 0 0 26px; font-size: 12px; color: var(--text-muted); }
+.progress-done li::before { content: "✓"; margin-right: 6px; color: var(--good); }
+.insight-grid.loading .insight { opacity: .45; }
+.skeleton-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+.skeleton-card i { display: block; height: 12px; border-radius: 6px; animation: shimmer 1.6s linear infinite;
+  background: linear-gradient(90deg, var(--surface-2) 30%, var(--border) 50%, var(--surface-2) 70%) 0 0 / 200% 100%; }
+.skeleton-card i:first-child { width: 55%; height: 16px; }
+.skeleton-card i:last-child { width: 80%; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 3s; }
+  .skeleton-card i { animation: none; }
+}
+
+.term { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+.tip { position: fixed; z-index: 30; max-width: 280px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-1); color: var(--text-secondary); font-size: 12px; line-height: 1.4; font-weight: 400;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .12); pointer-events: none; }
+
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -147,5 +189,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .grid { grid-template-columns: minmax(0, 1fr); }
   .topbar, .layout { padding-left: 16px; padding-right: 16px; }
   .banner { margin: 16px 16px 0; }
+  /* Two rows: brand and status, then the buttons. */
+  .actions { flex: 1 0 100%; flex-wrap: nowrap; justify-content: space-between; }
+  .actions .btn { padding: 6px 10px; font-size: 13px; }
+  .status-btn { position: absolute; top: 10px; right: 16px; }
   .insight-grid { grid-template-columns: minmax(0, 1fr); }
 }

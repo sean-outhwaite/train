@@ -20,11 +20,72 @@ const rolling = (vals, n = 7) => vals.map((_, i) => {
   return w.length ? w.reduce((a, b) => a + b, 0) / w.length : null;
 });
 
+// ---------- glossary tooltips ----------
+const TERMS = {
+  CTL: "Chronic Training Load: your fitness. A 42-day weighted average of daily training load.",
+  ATL: "Acute Training Load: your fatigue. A 7-day weighted average of daily training load.",
+  TSB: "Training Stress Balance: your form. CTL minus ATL going into the day. Negative means you're carrying fatigue.",
+  TRIMP: "Training Impulse: training load worked out from a session's duration and average heart rate.",
+  HRV: "Heart Rate Variability: how much the time between heartbeats varies, in milliseconds. Compare it with your own baseline, not other people's.",
+  TE: "Training Effect: Garmin's 0 to 5 score for how much a session improved your aerobic fitness.",
+  "VO2 max": "The most oxygen your body can use during hard exercise, in ml/kg/min. A common marker of aerobic fitness.",
+};
+const TERM_RE = new RegExp(`\\b(${Object.keys(TERMS).join("|")})\\b`, "g");
+// Takes text that's already escaped.
+const withTerms = (html) => html.replace(TERM_RE, (t) => `<abbr class="term" data-term="${t}" tabindex="0">${t}</abbr>`);
+
+// One floating element rather than CSS on each term, so scrolling containers can't clip it.
+function showTip(text, rect) {
+  const tip = $("#tip");
+  tip.textContent = text;
+  tip.hidden = false;
+  const { width, height } = tip.getBoundingClientRect();
+  const left = rect.left + rect.width / 2 - width / 2;
+  tip.style.left = `${Math.max(8, Math.min(left, innerWidth - width - 8))}px`;
+  tip.style.top = `${rect.top - height - 8 >= 8 ? rect.top - height - 8 : rect.bottom + 8}px`;
+}
+const hideTip = () => ($("#tip").hidden = true);
+
+for (const [on, off] of [["mouseover", "mouseout"], ["focusin", "focusout"]]) {
+  document.addEventListener(on, (e) => {
+    const term = e.target.closest?.(".term");
+    if (term) showTip(TERMS[term.dataset.term], term.getBoundingClientRect());
+  });
+  document.addEventListener(off, (e) => { if (e.target.closest?.(".term")) hideTip(); });
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
+document.addEventListener("scroll", hideTip, true);
+
+// Chart legends are drawn on canvas, so they need their own hover hook.
+function legendTip(e, item) {
+  const term = item.text.match(TERM_RE)?.[0];
+  if (term) showTip(TERMS[term], { left: e.native.clientX, width: 0, top: e.native.clientY - 6, bottom: e.native.clientY + 12 });
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || res.statusText);
   return body;
+}
+
+// Reads a server-sent event stream, calling onEvent(name, data) for each event.
+async function readSSE(res, onEvent) {
+  if (!res.ok) throw new Error(res.statusText);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const raw = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      onEvent(/^event: (.*)$/m.exec(raw)?.[1], JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] || "{}"));
+    }
+  }
 }
 
 // ---------- charts ----------
@@ -34,7 +95,7 @@ function baseOptions({ stacked = false, unit = "" } = {}) {
     responsive: true, maintainAspectRatio: false, animation: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { position: "top", align: "end", labels: { color: tick, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded" } },
+      legend: { position: "top", align: "end", onHover: legendTip, onLeave: hideTip, labels: { color: tick, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded" } },
       tooltip: {
         backgroundColor: css("--surface-1"), titleColor: css("--text-primary"), bodyColor: css("--text-secondary"),
         borderColor: css("--border"), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true,
@@ -141,7 +202,7 @@ function renderKpis(kpis) {
     const delta = k.current != null && k.previous != null ? k.current - k.previous : null;
     const arrow = delta == null ? "" : delta > 0 ? "▲" : delta < 0 ? "▼" : "■";
     return `<div class="kpi">
-      <div class="label">${k.label}</div>
+      <div class="label">${withTerms(k.label)}</div>
       <div class="value">${fmtNum(k.current)}<small>${k.unit}</small></div>
       <div class="delta">${delta == null ? "no prior data" : `${arrow} ${fmtNum(Math.abs(delta))} vs prior 7 days`}</div>
     </div>`;
@@ -156,10 +217,10 @@ function renderActivities(acts) {
     <td class="num">${a.distance_m ? fmtNum(a.distance_m / 1000, 2) + " km" : "–"}</td>
     <td class="num">${fmtNum((a.duration_s || 0) / 60, 0)} min</td>
     <td class="num">${a.avg_hr ? fmtNum(a.avg_hr, 0) + " bpm" : "–"}</td>
-    <td class="num">${a.training_effect ?? "–"}</td>
+    <td class="num">${a.training_effect == null ? "–" : Number(a.training_effect).toFixed(1)}</td>
   </tr>`).join("");
   $("#acts").innerHTML = `<thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Distance</th>
-    <th class="num">Time</th><th class="num">Avg HR</th><th class="num">Aerobic TE</th></tr></thead><tbody>${rows}</tbody>`;
+    <th class="num">Time</th><th class="num">Avg HR</th><th class="num">${withTerms("Aerobic TE")}</th></tr></thead><tbody>${rows}</tbody>`;
 }
 
 async function loadDashboard() {
@@ -198,8 +259,8 @@ function renderInsights(data) {
     card.innerHTML = `
       <span class="tag"><span class="sev" style="background:${css(sev.color)}">${sev.icon}</span>${sev.label} · ${ins.category}</span>
       <h3>${escapeHtml(ins.title)}</h3>
-      <p>${escapeHtml(ins.body)}</p>
-      <div class="evidence">${escapeHtml(ins.evidence)}</div>
+      <p>${withTerms(escapeHtml(ins.body))}</p>
+      <div class="evidence">${withTerms(escapeHtml(ins.evidence))}</div>
       ${ins.chart_data ? `<div class="mini-wrap"></div>` : ""}
       <button class="btn ask" data-i="${i}">Ask about this</button>`;
     grid.appendChild(card);
@@ -207,18 +268,65 @@ function renderInsights(data) {
   });
 }
 
+// Claude can't say how far through it is, so this shows real steps and elapsed time, not a percentage.
+function startProgress() {
+  const started = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - started) / 1000);
+    $("#progress-time").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  const grid = $("#insights");
+  grid.classList.add("loading");
+  if (!grid.querySelector(".insight")) {
+    grid.innerHTML = `<div class="skeleton-card"><i></i><i></i><i></i></div>`.repeat(3);
+  }
+  $("#progress-done").innerHTML = "";
+  $("#progress-step").textContent = "";
+  $("#insights-progress").hidden = false;
+  return {
+    step(text) {
+      const current = $("#progress-step");
+      if (text === current.textContent) return;
+      if (current.textContent) {
+        const done = document.createElement("li");
+        done.textContent = current.textContent.replace(/…$/, "");
+        $("#progress-done").prepend(done);
+        $("#progress-done").querySelector("li:nth-child(5)")?.remove();
+      }
+      current.textContent = text;
+    },
+    stop() {
+      clearInterval(timer);
+      grid.classList.remove("loading");
+      $("#insights-progress").hidden = true;
+    },
+  };
+}
+
 async function generateInsights() {
   const btn = $("#btn-insights");
   btn.disabled = true;
-  btn.textContent = "Claude is analysing…";
+  btn.textContent = "Generating…";
+  const progress = startProgress();
   try {
-    renderInsights(await api("/api/insights", { method: "POST" }));
+    let report = null, failure = null;
+    await readSSE(await fetch("/api/insights", { method: "POST" }), (event, data) => {
+      if (event === "status") progress.step(data.text);
+      else if (event === "report") report = data;
+      else if (event === "error") failure = data.message;
+    });
+    if (!report) throw new Error(failure || "Claude returned no report");
+    renderInsights(report);
     $("#insights-meta").textContent = "Generated just now";
   } catch (e) {
-    showBanner(`Insights failed: ${e.message}`);
+    renderInsights(insightData);
+    showBanner(`Insights failed: ${escapeHtml(e.message)}`);
   } finally {
+    progress.stop();
     btn.disabled = false;
-    btn.textContent = "Regenerate insights";
+    btn.textContent = insightData ? "Regenerate insights" : "Generate insights";
     loadStatus();
   }
 }
@@ -271,41 +379,28 @@ async function sendMessage(text) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text, conversation_id: conversationId }),
     });
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf("\n\n")) >= 0) {
-        const raw = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        const event = /^event: (.*)$/m.exec(raw)?.[1];
-        const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] || "{}");
-        if (event === "conversation") conversationId = data.id;
-        else if (event === "text") appendText(data.delta);
-        else if (event === "status") {
-          breakSegment();
-          status.textContent = data.text;
-          reply.appendChild(status);
-          scroll();
-        } else if (event === "chart") {
-          breakSegment();
-          const box = document.createElement("div");
-          box.className = "chat-chart";
-          box.innerHTML = `<h4>${escapeHtml(data.title || "")}</h4><div class="charts"></div>`;
-          reply.appendChild(box);
-          renderSpecChart(box.querySelector(".charts"), data, 170);
-          scroll();
-        } else if (event === "error") {
-          breakSegment();
-          status.remove();
-          reply.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(data.message || "Something went wrong")}</p>`);
-        }
+    await readSSE(res, (event, data) => {
+      if (event === "conversation") conversationId = data.id;
+      else if (event === "text") appendText(data.delta);
+      else if (event === "status") {
+        breakSegment();
+        status.textContent = data.text;
+        reply.appendChild(status);
+        scroll();
+      } else if (event === "chart") {
+        breakSegment();
+        const box = document.createElement("div");
+        box.className = "chat-chart";
+        box.innerHTML = `<h4>${escapeHtml(data.title || "")}</h4><div class="charts"></div>`;
+        reply.appendChild(box);
+        renderSpecChart(box.querySelector(".charts"), data, 170);
+        scroll();
+      } else if (event === "error") {
+        breakSegment();
+        status.remove();
+        reply.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(data.message || "Something went wrong")}</p>`);
       }
-    }
+    });
   } catch (e) {
     status.remove();
     reply.insertAdjacentHTML("beforeend", `<p class="error">${escapeHtml(e.message)}</p>`);
@@ -319,20 +414,29 @@ async function sendMessage(text) {
 }
 
 // ---------- status / setup ----------
-function showBanner(html) {
+let bannerTimer = null;
+function showBanner(html, { autoHide = false } = {}) {
+  clearTimeout(bannerTimer);
   $("#banner").innerHTML = html;
   $("#banner").hidden = false;
+  // Success notes clear themselves; problems stay until something replaces them.
+  if (autoHide) bannerTimer = setTimeout(() => ($("#banner").hidden = true), 8000);
 }
 
 async function loadStatus() {
   const s = await api("/api/status");
-  const pill = (ok, text) => `<span class="pill"><span class="dot" style="background:${css(ok ? "--good" : "--warning")}"></span>${text}</span>`;
-  $("#pills").innerHTML = [
-    pill(s.claude.ok, s.claude.ok ? "Claude connected" : "Claude logged out"),
-    pill(s.usage.runs < s.usage.limit, `${s.usage.runs}/${s.usage.limit} Claude runs today · ${fmtTokens(s.usage.tokens_in + s.usage.tokens_out)} tokens`),
-    pill(s.data.activities > 0, `${s.data.activities} activities · ${s.data.days} days${s.data.demo ? " (demo data)" : ""}`),
-    pill(s.strava.tools > 0, s.strava.tools > 0 ? "Strava connector" : "Strava connector not found"),
-  ].join("");
+  const rows = [
+    { ok: s.claude.ok, text: s.claude.ok ? "Claude connected" : "Claude logged out" },
+    { ok: s.usage.runs < s.usage.limit, text: `${s.usage.runs}/${s.usage.limit} Claude runs today · ${fmtTokens(s.usage.tokens_in + s.usage.tokens_out)} tokens` },
+    { ok: s.data.activities > 0, text: `${s.data.activities} activities · ${s.data.days} days${s.data.demo ? " (demo data)" : ""}` },
+    { ok: s.strava.tools > 0, text: s.strava.tools > 0 ? "Strava connector" : "Strava connector not found" },
+  ];
+  const dot = (ok) => css(ok ? "--good" : "--warning");
+  $("#status-list").innerHTML = rows.map((r) => `<li><span class="dot" style="background:${dot(r.ok)}"></span>${r.text}</li>`).join("");
+  // The header stays quiet unless something needs attention.
+  const issues = rows.filter((r) => !r.ok);
+  $("#status-dot").style.background = dot(!issues.length);
+  $("#status-label").textContent = issues.length > 1 ? `${issues.length} issues` : issues[0]?.text || (s.data.demo ? "Demo data" : "Status");
   if (!s.claude.ok) showBanner(`<b>Claude:</b> ${escapeHtml(s.claude.message)} Charts still work; insights and chat need it.`);
   if (s.claude.ok && !s.strava.discovered && !discoverTried) {
     discoverTried = true; // once per page load, even if it fails
@@ -348,6 +452,12 @@ function escapeHtml(s) {
 
 // ---------- wiring ----------
 $("#btn-insights").addEventListener("click", generateInsights);
+$("#status-pop").addEventListener("beforetoggle", (e) => {
+  if (e.newState !== "open") return;
+  const r = $("#btn-status").getBoundingClientRect();
+  e.target.style.top = `${r.bottom + 6}px`;
+  e.target.style.right = `${document.documentElement.clientWidth - r.right}px`;
+});
 $("#btn-chat").addEventListener("click", () => openDrawer(true));
 $("#btn-close").addEventListener("click", () => openDrawer(false));
 $("#btn-newchat").addEventListener("click", newChat);
@@ -374,7 +484,7 @@ $("#btn-sync").addEventListener("click", async (e) => {
   e.target.textContent = "Syncing…";
   try {
     const r = await api("/api/garmin/sync", { method: "POST" });
-    showBanner(`Garmin sync done: ${r.activities} activities, ${r.days} days since ${r.from}.`);
+    showBanner(`Garmin sync done: ${r.activities} activities, ${r.days} days since ${r.from}.`, { autoHide: true });
     await Promise.all([loadDashboard(), loadStatus()]);
   } catch (err) {
     showBanner(`<b>Garmin sync:</b> ${escapeHtml(err.message)}`);
@@ -388,7 +498,7 @@ $("#import-dialog").addEventListener("close", async () => {
   if ($("#import-dialog").returnValue !== "ok") return;
   try {
     const r = await api("/api/garmin/import", { method: "POST", body: JSON.stringify({ path: $("#import-path").value }) });
-    showBanner(`Imported ${r.activities + r.fit} activities, ${r.wellness_days} wellness days, ${r.sleep_days} sleep nights.`);
+    showBanner(`Imported ${r.activities + r.fit} activities, ${r.wellness_days} wellness days, ${r.sleep_days} sleep nights.`, { autoHide: true });
     await Promise.all([loadDashboard(), loadStatus()]);
   } catch (err) {
     showBanner(`<b>Import:</b> ${escapeHtml(err.message)}`);

@@ -1,7 +1,7 @@
 """Insight generation: metrics summary -> headless Claude -> validated InsightReport."""
 import json
 from contextlib import aclosing
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 from pydantic import BaseModel, ValidationError
 
@@ -119,14 +119,18 @@ def _extract(result_event: dict) -> dict:
     return json.loads(text[start:end + 1])
 
 
-async def generate(days: int = 90) -> dict:
+async def generate(days: int = 90) -> AsyncIterator[tuple[str, dict]]:
+    """Yield ("status", {"text": ...}) progress events, then ("report", report) once it's saved."""
+    yield "status", {"text": f"Summarising your last {days} days…"}
     conn = db.connect()
     summary = metrics.summary_for_claude(conn, days)
     metric_keys = sorted(metrics.available_metrics(conn, days))
     prompt = PROMPT.format(days=days, metric_keys=", ".join(metric_keys),
                            summary=json.dumps(summary, separators=(",", ":")))
     last_error = None
-    for _attempt in range(2):
+    for attempt in range(2):
+        if attempt:
+            yield "status", {"text": "Claude's reply didn't fit the format, trying again…"}
         result = None
         async with aclosing(claude_cli.run(prompt, kind="insights", json_schema=schema(metric_keys),
                                                persist=False)) as events:
@@ -135,6 +139,12 @@ async def generate(days: int = 90) -> dict:
                     result = ev
                 elif ev.get("type") == "error":
                     last_error = ev["message"]
+                elif ev.get("type") == "system" and ev.get("subtype") == "init":
+                    yield "status", {"text": "Claude is reading your summary…"}
+                elif ev.get("type") == "assistant":
+                    for block in ev.get("message", {}).get("content", []):
+                        if block.get("type") == "tool_use":
+                            yield "status", {"text": claude_cli.tool_status(block.get("name", ""))}
         if result is None:
             raise RuntimeError(last_error or "Claude returned no result")
         if result.get("is_error"):
@@ -155,7 +165,7 @@ async def generate(days: int = 90) -> dict:
     report["period"] = summary["period"]
     conn.execute("INSERT INTO insights (payload_json) VALUES (?)", (json.dumps(report),))
     conn.commit()
-    return report
+    yield "report", report
 
 
 def latest() -> dict | None:

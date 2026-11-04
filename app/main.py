@@ -99,14 +99,27 @@ def get_insights():
     return insights.latest() or {}
 
 
+def _sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _sse_response(events) -> StreamingResponse:
+    return StreamingResponse(events, media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.post("/api/insights")
 async def make_insights():
-    try:
-        return await insights.generate()
-    except claude_cli.RunRejected as e:
-        raise HTTPException(429, str(e)) from e
-    except Exception as e:
-        raise HTTPException(502, str(e)) from e
+    async def stream():
+        try:
+            async with aclosing(insights.generate()) as events:
+                async for event, data in events:
+                    yield _sse(event, data)
+        except Exception as e:  # includes RunRejected; the message is shown to the user
+            yield _sse("error", {"message": str(e)})
+        yield _sse("done", {})
+
+    return _sse_response(stream())
 
 
 @app.post("/api/claude/discover")
@@ -120,19 +133,6 @@ async def discover():
 class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
-
-
-def _sse(event: str, data) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
-
-
-def _status_for_tool(name: str) -> str:
-    if name.startswith("mcp__healthdb__"):
-        return {"query_data": "Querying your Garmin data…", "get_metric_series": "Pulling a metric trend…",
-                "show_chart": "Drawing a chart…"}.get(name.split("__")[-1], "Using your Garmin data…")
-    if "strava" in name.lower():
-        return "Checking Strava…"
-    return f"Using {name}…"
 
 
 @app.post("/api/chat")
@@ -176,7 +176,7 @@ async def chat(req: ChatRequest):
                             if block.get("type") != "tool_use":
                                 continue
                             name = block.get("name", "")
-                            yield _sse("status", {"text": _status_for_tool(name)})
+                            yield _sse("status", {"text": claude_cli.tool_status(name)})
                             if name.endswith("__show_chart"):
                                 try:
                                     yield _sse("chart", metrics.chart_data(db.connect(), block.get("input") or {}))
@@ -194,5 +194,4 @@ async def chat(req: ChatRequest):
             yield _sse("error", {"message": str(e)})
         yield _sse("done", {})
 
-    return StreamingResponse(stream(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return _sse_response(stream())
