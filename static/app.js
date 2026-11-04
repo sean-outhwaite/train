@@ -326,7 +326,7 @@ async function generateInsights() {
   } finally {
     progress.stop();
     btn.disabled = false;
-    btn.textContent = insightData ? "Regenerate insights" : "Generate insights";
+    btn.textContent = insightData?.insights ? "Regenerate insights" : "Generate insights";
     loadStatus();
   }
 }

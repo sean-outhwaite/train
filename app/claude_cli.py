@@ -206,8 +206,9 @@ async def run(prompt: str, *, kind: str, conversation_id: str | None = None, res
         finally:
             if proc.returncode is None:
                 proc.kill()
-                await proc.wait()
+            # Log before awaiting: when the browser disconnects, the next await raises again.
             db.finish_run(run_id, status, run_usage, list(tool_calls.values()))
+            await proc.wait()
 
 
 async def discover_tools() -> dict:
