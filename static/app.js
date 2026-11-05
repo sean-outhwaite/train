@@ -7,6 +7,8 @@ let insightData = null;
 let conversationId = null;
 let sending = false;
 let discoverTried = false;
+let activityData = null;
+let routeMap = null;
 
 // Colour follows the entity: each sport keeps its slot no matter which sports are present.
 const SPORT_SLOT = { running: 1, cycling: 2, strength: 3, swimming: 4, walking: 5, other: 6 };
@@ -27,7 +29,7 @@ const TERMS = {
   TSB: "Training Stress Balance: your form. CTL minus ATL going into the day. Negative means you're carrying fatigue.",
   TRIMP: "Training Impulse: training load worked out from a session's duration and average heart rate.",
   HRV: "Heart Rate Variability: how much the time between heartbeats varies, in milliseconds. Compare it with your own baseline, not other people's.",
-  TE: "Training Effect: Garmin's 0 to 5 score for how much a session improved your aerobic fitness.",
+  TE: "Training Effect: Garmin's 0 to 5 score for how much a session improved your aerobic or anaerobic fitness.",
   "VO2 max": "The most oxygen your body can use during hard exercise, in ml/kg/min. A common marker of aerobic fitness.",
 };
 const TERM_RE = new RegExp(`\\b(${Object.keys(TERMS).join("|")})\\b`, "g");
@@ -37,6 +39,7 @@ const withTerms = (html) => html.replace(TERM_RE, (t) => `<abbr class="term" dat
 // One floating element rather than CSS on each term, so scrolling containers can't clip it.
 function showTip(text, rect) {
   const tip = $("#tip");
+  ($("dialog[open]") || document.body).append(tip); // a modal dialog covers everything outside it
   tip.textContent = text;
   tip.hidden = false;
   const { width, height } = tip.getBoundingClientRect();
@@ -210,10 +213,10 @@ function renderKpis(kpis) {
 }
 
 function renderActivities(acts) {
-  const rows = acts.map((a) => `<tr>
+  const rows = acts.map((a) => `<tr data-id="${escapeHtml(a.source_id)}">
     <td>${new Date(a.start_time).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</td>
     <td><span class="pill"><span class="dot" style="background:${sportColor(a.sport)}"></span>${a.sport}</span></td>
-    <td>${escapeHtml(a.name || "")}</td>
+    <td><button class="row-link">${escapeHtml(a.name || a.sport)}</button></td>
     <td class="num">${a.distance_m ? fmtNum(a.distance_m / 1000, 2) + " km" : "–"}</td>
     <td class="num">${fmtNum((a.duration_s || 0) / 60, 0)} min</td>
     <td class="num">${a.avg_hr ? fmtNum(a.avg_hr, 0) + " bpm" : "–"}</td>
@@ -221,6 +224,153 @@ function renderActivities(acts) {
   </tr>`).join("");
   $("#acts").innerHTML = `<thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Distance</th>
     <th class="num">Time</th><th class="num">Avg HR</th><th class="num">${withTerms("Aerobic TE")}</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+// ---------- activity detail ----------
+const fmtDuration = (seconds) => {
+  const t = Math.round(seconds);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = String(t % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+};
+const hasPace = (sport) => ["running", "walking", "swimming"].includes(sport);
+// Returns [value, unit].
+const speedParts = (mps, sport) => {
+  if (sport === "swimming") return [fmtDuration(100 / mps), "/100 m"];
+  if (hasPace(sport)) return [fmtDuration(1000 / mps), "/km"];
+  return [fmtNum(mps * 3.6), "km/h"];
+};
+const fmtSpeed = (mps, sport) => (mps ? speedParts(mps, sport).join(" ") : null);
+const withUnit = (v, unit, d = 0) => (v ? `${fmtNum(v, d)} ${unit}`.trim() : null);
+const titleCase = (s) => s.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+const range = (lo, hi, unit) => (lo == null || hi == null ? null : `${fmtNum(lo, 0)}–${fmtNum(hi, 0)} ${unit}`);
+
+function drawZones(card, canvas, zones, color) {
+  $(card).hidden = !zones;
+  if (!zones) return;
+  const total = zones.reduce((a, b) => a + b, 0);
+  const opts = baseOptions();
+  opts.indexAxis = "y";
+  opts.interaction.axis = "y";
+  opts.plugins.legend.display = false;
+  opts.plugins.tooltip.callbacks.label = (c) => ` ${fmtNum((c.parsed.x / total) * 100, 0)}% of zone time`;
+  opts.scales = {
+    x: { beginAtZero: true, grid: { display: false }, border: { display: false }, ticks: { display: false } },
+    y: { grid: { display: false }, border: { color: css("--border") }, ticks: { color: css("--text-secondary"), autoSkip: false } },
+  };
+  draw(canvas, {
+    type: "bar",
+    data: { labels: zones.map((s, i) => `Z${i + 1}  ${fmtDuration(s)}`), datasets: [bar("Time", zones, color)] },
+    options: opts,
+  });
+}
+
+function drawRoute(a) {
+  routeMap?.remove();
+  routeMap = null;
+  const points = a.track;
+  $("#act-map-card").hidden = !a.has_route || points?.length === 0;
+  $("#act-map").hidden = !points;
+  $("#act-map-note").textContent = a.routeError ? "Couldn't load the route from Garmin" : points ? "" : "Loading…";
+  if (!points?.length) return;
+
+  const color = sportColor(a.sport);
+  $("#act-map").classList.toggle("dark", css("color-scheme") === "dark");
+  routeMap = L.map("act-map", { scrollWheelZoom: false });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(routeMap);
+  const route = L.polyline(points, { color, weight: 3 }).addTo(routeMap);
+  const marker = (point, label, fillColor) => L.circleMarker(point,
+    { radius: 6, color: css("--surface-1"), weight: 2, fillColor, fillOpacity: 1 }).bindTooltip(label).addTo(routeMap);
+  marker(points.at(-1), "Finish", css("--text-primary"));
+  marker(points[0], "Start", color);
+  routeMap.fitBounds(route.getBounds(), { padding: [16, 16] });
+}
+
+async function loadRoute(a) {
+  try {
+    a.track = await api(`/api/activities/${encodeURIComponent(a.source_id)}/track`);
+  } catch {
+    a.routeError = true;
+  }
+  if (a === activityData && $("#activity-dialog").open) drawRoute(a);
+}
+
+function renderActivity(a) {
+  const speed = a.avg_speed || (a.distance_m && a.duration_s ? a.distance_m / a.duration_s : null);
+  const when = new Date(a.start_time).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" });
+  $("#act-title").textContent = a.name || titleCase(a.sport);
+  $("#act-meta").textContent = [titleCase(a.sport), when, a.location].filter(Boolean).join(" · ");
+
+  const tiles = [
+    ["Distance", a.distance_m && fmtNum(a.distance_m / 1000, 2), "km"],
+    ["Time", a.duration_s && fmtDuration(a.duration_s), ""],
+    [hasPace(a.sport) ? "Avg pace" : "Avg speed", ...(speed ? speedParts(speed, a.sport) : [null, ""])],
+    ["Avg HR", a.avg_hr && fmtNum(a.avg_hr, 0), "bpm"],
+    ["Avg power", a.avg_power && fmtNum(a.avg_power, 0), "W"],
+    ["Elevation gain", a.elev_gain_m && fmtNum(a.elev_gain_m, 0), "m"],
+  ].filter(([, value]) => value);
+  $("#act-tiles").innerHTML = tiles.map(([label, value, unit]) =>
+    `<div class="kpi"><div class="label">${label}</div><div class="value">${value}<small>${unit}</small></div></div>`).join("");
+
+  drawRoute(a);
+  drawZones("#act-hr-card", "act-hr", a.hr_zones, sportColor(a.sport));
+  drawZones("#act-power-card", "act-power", a.power_zones, sportColor(a.sport));
+
+  const groups = [
+    ["Effort", [
+      ["Max HR", withUnit(a.max_hr, "bpm")],
+      ["Aerobic TE", a.training_effect && Number(a.training_effect).toFixed(1)],
+      ["Anaerobic TE", a.anaerobic_te && Number(a.anaerobic_te).toFixed(1)],
+      ["Main benefit", a.te_label && a.te_label !== "UNKNOWN" && titleCase(a.te_label)],
+      ["Training load", withUnit(a.training_load, "")],
+      ["Calories", withUnit(a.calories, "kcal")],
+      ["VO2 max", withUnit(a.vo2max, "")],
+      ["Body Battery", a.body_battery_change && `${a.body_battery_change > 0 ? "+" : ""}${a.body_battery_change}`],
+    ]],
+    [hasPace(a.sport) ? "Pace" : "Speed", [
+      ["Peak", fmtSpeed(a.max_speed, a.sport)],
+      ["Grade adjusted", fmtSpeed(a.gap_speed, a.sport)],
+      ...a.fastest.map((f) => [`Fastest ${f.label}`, fmtDuration(f.seconds)]),
+      ["Moving time", a.moving_s && fmtDuration(a.moving_s)],
+    ]],
+    ["Power", [["Normalized", withUnit(a.norm_power, "W")], ["Max", withUnit(a.max_power, "W")]]],
+    ["Form", [
+      ["Avg cadence", withUnit(a.avg_cadence_spm, "spm") || withUnit(a.avg_cadence_rpm, "rpm")],
+      ["Max cadence", withUnit(a.max_cadence_spm, "spm") || withUnit(a.max_cadence_rpm, "rpm")],
+      ["Steps", withUnit(a.steps, "")],
+      ["Stride length", withUnit(a.stride_cm, "cm")],
+      ["Ground contact", withUnit(a.ground_contact_ms, "ms")],
+      ["Vertical oscillation", withUnit(a.vertical_osc_cm, "cm", 1)],
+      ["Vertical ratio", withUnit(a.vertical_ratio, "%", 1)],
+    ]],
+    ["Conditions", [
+      ["Temperature", range(a.min_temp_c, a.max_temp_c, "°C")],
+      ["Elevation range", range(a.min_elev_m, a.max_elev_m, "m")],
+      ["Elevation loss", withUnit(a.elev_loss_m, "m")],
+    ]],
+  ];
+  $("#act-groups").innerHTML = groups.map(([title, rows]) => {
+    const shown = rows.filter(([, value]) => value);
+    if (!shown.length) return "";
+    return `<section><h3>${title}</h3><dl>${shown.map(([label, value]) =>
+      `<div><dt>${withTerms(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl></section>`;
+  }).join("");
+}
+
+async function openActivity(id) {
+  try {
+    activityData = await api(`/api/activities/${encodeURIComponent(id)}`);
+  } catch (err) {
+    showBanner(`Couldn't load that activity: ${escapeHtml(err.message)}`);
+    return;
+  }
+  const dialog = $("#activity-dialog");
+  dialog.showModal();
+  dialog.scrollTop = 0;
+  renderActivity(activityData);
+  if (activityData.has_route) loadRoute(activityData);
 }
 
 async function loadDashboard() {
@@ -452,6 +602,13 @@ function escapeHtml(s) {
 
 // ---------- wiring ----------
 $("#btn-insights").addEventListener("click", generateInsights);
+$("#acts").addEventListener("click", (e) => {
+  const row = e.target.closest("tr[data-id]");
+  if (row) openActivity(row.dataset.id);
+});
+$("#activity-dialog").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.close();
+});
 $("#status-pop").addEventListener("beforetoggle", (e) => {
   if (e.newState !== "open") return;
   const r = $("#btn-status").getBoundingClientRect();
@@ -507,6 +664,7 @@ $("#import-dialog").addEventListener("close", async () => {
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   if (dashData && !dashData.empty) renderCharts(dashData);
   if (insightData) renderInsights(insightData);
+  if ($("#activity-dialog").open) renderActivity(activityData);
 });
 
 Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;

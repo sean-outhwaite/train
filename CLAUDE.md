@@ -24,6 +24,7 @@ Claude generates insights and answers chat questions. See README.md for setup.
 - **Run directory:** Claude runs start in `~/.cache/train`, outside the project, so this file doesn't reach
   the app's prompts. Keep that path fixed, because `--resume` depends on it.
 - **Claude's data access:** database tools stay read-only, and chart metrics stay limited to `metrics.METRICS`.
+  GPS routes stay in `data/tracks/`, not the database, so those tools can't read them.
 - **Data:** a gap means not recorded, not incomplete data. Hide what's empty rather than showing blanks.
 - **Charts:** no dual axes. Series with different units go in separate panels.
 - **Privacy:** this repo is shared. Keep personal health details and habits out of code, docs, prompts and

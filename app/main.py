@@ -57,7 +57,7 @@ def dashboard(days: int = 90):
         return {"empty": True}
     frame = metrics.daily_frame(conn, max(14, min(days, 365)))
     acts = [dict(r) for r in conn.execute(
-        "SELECT start_time, sport, name, distance_m, duration_s, avg_hr, elev_gain_m, training_effect "
+        "SELECT source_id, start_time, sport, name, distance_m, duration_s, avg_hr, elev_gain_m, training_effect "
         "FROM activities ORDER BY start_time DESC LIMIT 25")]
     return {
         "empty": False,
@@ -67,6 +67,25 @@ def dashboard(days: int = 90):
         "activities": acts,
         "metrics": metrics.METRICS,
     }
+
+
+@app.get("/api/activities/{source_id}")
+def activity(source_id: str):
+    detail = metrics.activity_detail(db.connect(), source_id)
+    if detail is None:
+        raise HTTPException(404, "Activity not found")
+    return detail
+
+
+@app.get("/api/activities/{source_id}/track")
+def activity_track(source_id: str):
+    detail = metrics.activity_detail(db.connect(), source_id)
+    if detail is None or not detail["has_route"]:
+        raise HTTPException(404, "No route for this activity")
+    try:
+        return garmin_sync.track(source_id)
+    except Exception as e:
+        raise HTTPException(502, str(e)) from e
 
 
 @app.post("/api/chart")

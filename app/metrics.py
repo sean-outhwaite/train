@@ -1,8 +1,41 @@
 """Derived metrics shared by the dashboard, the insights prompt and Claude's chart tool."""
+import json
 import math
 import sqlite3
 import statistics
 from datetime import date, timedelta
+
+# Fields shown from Garmin's activity summary. Named one by one so owner and GPS fields stay out of the API.
+ACTIVITY_EXTRAS = {
+    "location": "locationName",
+    "moving_s": "movingDuration",
+    "avg_speed": "averageSpeed",
+    "max_speed": "maxSpeed",
+    "gap_speed": "avgGradeAdjustedSpeed",
+    "elev_loss_m": "elevationLoss",
+    "min_elev_m": "minElevation",
+    "max_elev_m": "maxElevation",
+    "min_temp_c": "minTemperature",
+    "max_temp_c": "maxTemperature",
+    "steps": "steps",
+    "avg_cadence_spm": "averageRunningCadenceInStepsPerMinute",
+    "max_cadence_spm": "maxRunningCadenceInStepsPerMinute",
+    "avg_cadence_rpm": "averageBikingCadenceInRevPerMinute",
+    "max_cadence_rpm": "maxBikingCadenceInRevPerMinute",
+    "stride_cm": "avgStrideLength",
+    "ground_contact_ms": "avgGroundContactTime",
+    "vertical_osc_cm": "avgVerticalOscillation",
+    "vertical_ratio": "avgVerticalRatio",
+    "max_power": "maxPower",
+    "norm_power": "normPower",
+    "training_load": "activityTrainingLoad",
+    "anaerobic_te": "anaerobicTrainingEffect",
+    "te_label": "trainingEffectLabel",
+    "vo2max": "vO2MaxValue",
+    "body_battery_change": "differenceBodyBattery",
+}
+FASTEST_SPLITS = {"1 km": "fastestSplit_1000", "1 mile": "fastestSplit_1609",
+                  "5 km": "fastestSplit_5000", "10 km": "fastestSplit_10000"}
 
 # Whitelisted daily series. Claude's chart specs may only reference these keys.
 METRICS: dict[str, dict] = {
@@ -126,6 +159,25 @@ def series(conn: sqlite3.Connection, metric: str, days: int = 90) -> dict:
         raise ValueError(f"unknown metric {metric!r}; choose from {sorted(METRICS)}")
     frame = daily_frame(conn, days)
     return {"metric": metric, **METRICS[metric], "dates": [r["date"] for r in frame], "values": [r[metric] for r in frame]}
+
+
+def activity_detail(conn: sqlite3.Connection, source_id: str) -> dict | None:
+    row = conn.execute("SELECT * FROM activities WHERE source_id = ?", (source_id,)).fetchone()
+    if row is None:
+        return None
+    a = dict(row)
+    raw = json.loads(a.pop("raw_json") or "{}")
+    a["has_route"] = source_id.startswith("garmin-") and bool(raw.get("hasPolyline"))
+    # Data exports reuse some of these keys in other units. Only synced rows have a text start time.
+    if not isinstance(raw.get("startTimeLocal"), str):
+        raw = {}
+    a.update({k: raw.get(field) for k, field in ACTIVITY_EXTRAS.items()})
+    for key, prefix in (("hr_zones", "hrTimeInZone"), ("power_zones", "powerTimeInZone")):
+        zones = [raw.get(f"{prefix}_{i}") or 0 for i in range(1, 6)]
+        a[key] = zones if any(zones) else None
+    a["fastest"] = [{"label": label, "seconds": raw[field]}
+                    for label, field in FASTEST_SPLITS.items() if raw.get(field)]
+    return a
 
 
 def weekly_volume(conn: sqlite3.Connection, weeks: int = 16) -> dict:

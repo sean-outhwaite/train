@@ -17,6 +17,7 @@ from . import db
 
 load_dotenv(db.ROOT / ".env")
 TOKEN_DIR = db.DATA_DIR / "garmin_tokens"
+TRACK_DIR = db.DATA_DIR / "tracks"
 BACKFILL_DAYS = 180
 
 SPORT_MAP = [
@@ -93,6 +94,23 @@ def _daily_row(g: Garmin, day: str) -> dict:
         "body_battery_low": stats.get("bodyBatteryLowestValue"),
         "vo2max": generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue"),
     }
+
+
+def track(source_id: str) -> list[list[float]]:
+    """An activity's GPS route as [lat, lon] pairs, fetched from Garmin the first time it's viewed.
+
+    Saved as files rather than in the database, so Claude's query tool can't reach exact routes.
+    """
+    path = TRACK_DIR / f"{source_id}.json"
+    if path.exists():
+        return json.loads(path.read_text())
+    details = client().get_activity_details(source_id.removeprefix("garmin-"), maxchart=1, maxpoly=4000)
+    points = [[p["lat"], p["lon"]] for p in (details.get("geoPolylineDTO") or {}).get("polyline") or []
+              if p.get("lat") is not None and p.get("lon") is not None]
+    if points:  # an empty route may just not be processed yet, so try again next time
+        TRACK_DIR.mkdir(exist_ok=True)
+        path.write_text(json.dumps(points))
+    return points
 
 
 def sync(days: int | None = None, interactive: bool = False, log=print) -> dict:
