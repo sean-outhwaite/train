@@ -274,7 +274,6 @@ function drawRoute(a) {
   if (!points?.length) return;
 
   const color = sportColor(a.sport);
-  $("#act-map").classList.toggle("dark", css("color-scheme") === "dark");
   routeMap = L.map("act-map", { scrollWheelZoom: false });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,

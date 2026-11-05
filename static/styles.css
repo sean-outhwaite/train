@@ -201,7 +201,6 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .act-chart { height: 170px; }
 .act-map { height: 280px; border-radius: 8px; overflow: hidden; isolation: isolate; background: var(--surface-2); font: inherit; }
 .act-map[hidden] { display: none; }
-.act-map.dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9); }
 .act-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; }
 .act-groups h3 { margin-bottom: 4px; }
 .act-groups dl { margin: 0; }
