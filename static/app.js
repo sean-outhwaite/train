@@ -14,6 +14,8 @@ let routeMap = null;
 const SPORT_SLOT = { running: 1, cycling: 2, strength: 3, swimming: 4, walking: 5, other: 6 };
 const sportColor = (s) => css(`--series-${SPORT_SLOT[s] || 6}`);
 const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, "0");
+// Optional numeric design tokens, with the default design's value as the fallback.
+const cssNum = (name, fallback) => { const v = parseFloat(css(name)); return Number.isNaN(v) ? fallback : v; };
 
 const fmtDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const fmtNum = (v, d = 1) => (v == null ? "–" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d }));
@@ -113,16 +115,17 @@ function baseOptions({ stacked = false, unit = "" } = {}) {
 }
 
 const line = (label, data, color, extra = {}) => ({
-  type: "line", label, data, borderColor: color, backgroundColor: color, borderWidth: 2,
+  type: "line", label, data, borderColor: color, backgroundColor: color, borderWidth: cssNum("--chart-line", 2),
   pointRadius: 0, pointHoverRadius: 4, pointHoverBorderWidth: 2, pointHoverBorderColor: css("--surface-1"),
   tension: 0.25, spanGaps: true, ...extra,
 });
 const bar = (label, data, color, extra = {}) => ({
-  type: "bar", label, data, backgroundColor: color, borderRadius: 4, borderSkipped: "start",
+  type: "bar", label, data, backgroundColor: color, borderRadius: cssNum("--chart-radius", 4), borderSkipped: "start",
   borderColor: css("--surface-1"), borderWidth: { top: 2 }, maxBarThickness: 28, ...extra,
 });
 
 function draw(target, config) {
+  applyChartFont();
   const canvas = typeof target === "string" ? document.getElementById(target) : target;
   charts.get(canvas)?.destroy();
   const chart = new Chart(canvas, config);
@@ -660,13 +663,21 @@ $("#import-dialog").addEventListener("close", async () => {
     showBanner(`<b>Import:</b> ${escapeHtml(err.message)}`);
   }
 });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+function rerender() {
   if (dashData && !dashData.empty) renderCharts(dashData);
   if (insightData) renderInsights(insightData);
   if ($("#activity-dialog").open) renderActivity(activityData);
-});
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
+// Canvas text can't swap fonts in later, so redraw once any web fonts have loaded.
+document.fonts?.ready.then(rerender);
 
-Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+function applyChartFont() {
+  Chart.defaults.font.family = css("--font-chart") || getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = cssNum("--chart-font-size", 12);
+}
+
+$("#dateline").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 loadStatus();
 loadDashboard();
 api("/api/insights").then((d) => renderInsights(d.insights ? d : null));
