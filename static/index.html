@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=12">
+  <link rel="stylesheet" href="/static/styles.css?v=13">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
@@ -38,11 +38,9 @@
       <button id="btn-status" class="btn ghost status-btn" popovertarget="status-pop" aria-label="Show status">
         <span class="dot" id="status-dot"></span><span id="status-label">Status</span>
       </button>
-      <div class="btn-group">
-        <button id="btn-sync" class="btn">Sync Garmin</button>
-        <button id="btn-import" class="btn">Manual import</button>
-      </div>
-      <button id="btn-chat" class="btn primary">Ask Claude</button>
+      <button id="btn-sync" class="btn sign" data-jp="同期">Sync Garmin</button>
+      <button id="btn-import" class="btn sign" data-jp="取込">Manual import</button>
+      <button id="btn-chat" class="btn sign accent" data-jp="質問">Ask Claude</button>
     </div>
     <div id="status-pop" class="status-pop" popover><ul id="status-list"></ul></div>
   </header>

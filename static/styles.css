@@ -9,6 +9,8 @@
   --stripe: #1d4fb0; --stripe-2: #e5577a;
   /* departure board: dark in both themes */
   --board: #111418; --board-edge: #2a2f36; --board-rule: #22282f;
+  /* header buttons, styled as platform signs */
+  --sign: #14295c; --sign-ink: #ffffff; --sign-accent: #c4365c; --sign-accent-ink: #ffffff;
   --led: #ffae1a; --led-unit: #c78a1a; --led-dim: #9aa3ad; --led-green: #4fe08a; --led-label: #e9edf2;
   /* categorical slots, fixed order */
   --series-1: #1d4fb0; --series-2: #e5577a; --series-3: #00a07a; --series-4: #eda200;
@@ -31,6 +33,7 @@
     --accent: #5b8cf0; --accent-ink: #0b111b; --logo-line: #5b8cf0;
     --stripe: #5b8cf0; --stripe-2: #f07895;
     --board: #06080b; --board-edge: #1d2430;
+    --sign: #24428a; --sign-accent: #f07895; --sign-accent-ink: #0b111b;
     --series-1: #5b8cf0; --series-2: #f07895; --series-3: #2cc79a; --series-4: #f2b630;
     --series-5: #a281ef; --series-6: #8a96a6; --series-7: #f06a4d; --series-8: #3cc4d4;
   }
@@ -42,6 +45,7 @@
   --accent: #5b8cf0; --accent-ink: #0b111b; --logo-line: #5b8cf0;
   --stripe: #5b8cf0; --stripe-2: #f07895;
   --board: #06080b; --board-edge: #1d2430;
+  --sign: #24428a; --sign-accent: #f07895; --sign-accent-ink: #0b111b;
   --series-1: #5b8cf0; --series-2: #f07895; --series-3: #2cc79a; --series-4: #f2b630;
   --series-5: #a281ef; --series-6: #8a96a6; --series-7: #f06a4d; --series-8: #3cc4d4;
 }
@@ -99,9 +103,15 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .btn.primary:active { transform: translateY(1px); box-shadow: none; }
 .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; }
 .btn:disabled { opacity: .55; cursor: progress; }
-.btn-group { display: inline-flex; }
-.btn-group .btn:first-child { border-radius: 999px 0 0 999px; }
-.btn-group .btn:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+/* Header buttons read like station signs: a small Japanese label over the English. The label comes
+   from data-jp, so code that swaps the button text ("Syncing…") leaves it alone. */
+.btn.sign { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 5px 12px 6px; border: 0; border-radius: 4px; background: var(--sign); color: var(--sign-ink);
+  font-size: 13px; font-weight: 700; line-height: 1.15; box-shadow: inset 0 -3px 0 rgb(255 255 255 / .14); }
+.btn.sign::before { content: attr(data-jp); font-size: 10px; font-weight: 500; letter-spacing: .12em; opacity: .75; }
+.btn.sign:hover { background: var(--sign); filter: brightness(1.18); }
+.btn.sign:active { transform: translateY(1px); }
+.btn.sign.accent { background: var(--sign-accent); color: var(--sign-accent-ink); }
 
 .banner { margin: 16px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--surface-2);
   border-left: 4px solid var(--warning); }
@@ -270,6 +280,7 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   /* Two rows: brand and status, then the buttons. */
   .actions { flex: 1 0 100%; flex-wrap: nowrap; justify-content: space-between; }
   .actions .btn { padding: 6px 10px; font-size: 13px; }
+  .actions .btn.sign { flex: 1; padding: 5px 9px 6px; font-size: 12.5px; white-space: nowrap; }
   .status-btn { position: absolute; top: 10px; right: 16px; }
   .insight-grid { grid-template-columns: minmax(0, 1fr); }
   .panel { padding: 16px; }
