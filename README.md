@@ -12,6 +12,14 @@ and you don't need an API key.
   because Strava's API policy bans AI use of API data. Strava data isn't stored, apart from any figures
   quoted in saved insight reports.
 
+![Dashboard with training load, wellness charts and insights](docs/screenshots/dashboard.png)
+
+Click an activity to open it, with its route, heart rate zones and detailed stats:
+
+![Activity detail with route map and heart rate zones](docs/screenshots/activity.png)
+
+_Screenshots use generated demo data._
+
 ## Setup
 
 ```bash
