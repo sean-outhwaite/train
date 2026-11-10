@@ -48,6 +48,17 @@ python -m app.seed                 # demo data, to try the UI (remove with: pyth
 uvicorn app.main:app --reload      # http://localhost:8000
 ```
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests cover the read-only SQL guard, the token safeguards, the metric maths and the Garmin export parser.
+Each test uses its own temporary database, and a fake `claude` script stands in for real runs, so the
+tests never touch `data/` or use your Claude plan.
+
 ## How it fits together
 
 | File | Role |

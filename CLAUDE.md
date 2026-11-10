@@ -10,7 +10,10 @@ Claude generates insights and answers chat questions. See README.md for setup.
 .venv/bin/python -m app.garmin_sync          # sync Garmin (add --login the first time, for MFA)
 .venv/bin/python -m app.garmin_import <dir>  # import an unzipped Garmin data export
 .venv/bin/python -m app.seed                 # demo data, for trying the UI only
+.venv/bin/python -m pytest                   # tests (pip install -r requirements-dev.txt first)
 ```
+
+Tests run against a temporary database and a fake `claude` script. Keep test data made up, never real exports.
 
 `--clear` on `app.seed` empties the whole `daily` table, including real data. Clear demo data before syncing.
 
