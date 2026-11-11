@@ -487,6 +487,7 @@ async function generateInsights() {
 function openDrawer(open = true) {
   $("#drawer").classList.toggle("open", open);
   $("#drawer").setAttribute("aria-hidden", String(!open));
+  document.body.classList.toggle("chat-open", open);
   if (open) $("#input").focus();
 }
 
