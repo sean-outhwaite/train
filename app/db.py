@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS claude_runs (
     tools_json      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_claude_runs_started ON claude_runs(started_at);
+
+-- App bookkeeping, such as when Garmin last synced.
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 ACTIVITY_COLS = [
@@ -148,6 +154,16 @@ def recent_discover_attempt(minutes: int) -> bool:
         "SELECT 1 FROM claude_runs WHERE kind = 'discover' AND started_at >= datetime('now', ?) LIMIT 1",
         (f"-{minutes} minutes",),
     ).fetchone() is not None
+
+
+def get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    r = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return r[0] if r else None
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                 (key, value))
 
 
 def latest_date(conn: sqlite3.Connection) -> str | None:

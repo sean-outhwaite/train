@@ -45,7 +45,7 @@ async def status():
         "claude": await claude_cli.auth_status(),
         "usage": claude_cli.usage(),
         "data": {"activities": counts["acts"], "days": counts["days"], "demo": counts["demo"] > 0,
-                 "latest": db.latest_date(conn)},
+                 "latest": db.latest_date(conn), "synced_at": db.get_meta(conn, "garmin_synced_at")},
         "strava": {"discovered": strava is not None, "tools": len(strava["strava_tools"]) if strava else 0},
     }
 

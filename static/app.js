@@ -582,6 +582,7 @@ async function loadStatus() {
     { ok: s.claude.ok, text: s.claude.ok ? "Claude connected" : "Claude logged out" },
     { ok: s.usage.runs < s.usage.limit, text: `${s.usage.runs}/${s.usage.limit} Claude runs today · ${fmtTokens(s.usage.tokens_in + s.usage.tokens_out)} tokens` },
     { ok: s.data.activities > 0, text: `${s.data.activities} activities · ${s.data.days} days${s.data.demo ? " (demo data)" : ""}` },
+    syncRow(s.data.synced_at),
     { ok: s.strava.tools > 0, text: s.strava.tools > 0 ? "Strava connector" : "Strava connector not found" },
   ];
   const dot = (ok) => css(ok ? "--good" : "--warning");
@@ -595,6 +596,14 @@ async function loadStatus() {
     discoverTried = true; // once per page load, even if it fails
     api("/api/claude/discover", { method: "POST" }).then(loadStatus).catch(() => {});
   }
+}
+
+// Yellow once Garmin hasn't synced for a day, so stale data is easy to spot.
+function syncRow(syncedAt) {
+  if (!syncedAt) return { ok: false, text: "Garmin not synced" };
+  const hours = (Date.now() - new Date(syncedAt)) / 36e5;
+  const ago = hours < 1 ? "under an hour ago" : hours < 48 ? `${Math.floor(hours)}h ago` : `${Math.floor(hours / 24)} days ago`;
+  return { ok: hours <= 24, text: `Garmin synced ${ago}` };
 }
 
 const fmtTokens = (n) => (n >= 1000 ? `${fmtNum(n / 1000, 1)}k` : String(n));

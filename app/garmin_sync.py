@@ -8,7 +8,7 @@ Later syncs (also triggered by the dashboard's Sync button):
 import json
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from garminconnect import Garmin
@@ -137,6 +137,7 @@ def sync(days: int | None = None, interactive: bool = False, log=print) -> dict:
         if i % 10 == 0:
             conn.commit()
             log(f"wellness: {i + 1}/{n} days")
+    db.set_meta(conn, "garmin_synced_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     conn.commit()
     return {"activities": len(acts), "days": n, "from": start.isoformat()}
 
