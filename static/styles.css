@@ -77,9 +77,6 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .brand-line { fill: none; stroke: var(--logo-line); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .brand-train { fill: var(--text-primary); }
 .brand-glass { fill: var(--surface-1); }
-.dateline { margin: 0 auto 0 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
-  background: var(--surface-2); color: var(--text-secondary); }
-.dateline:empty { display: none; }
 .pill { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 500;
   color: var(--text-secondary); text-transform: capitalize; }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
@@ -290,7 +287,6 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .topbar { padding: 10px 16px 18px; }
   .layout { padding-left: 16px; padding-right: 16px; }
   .banner { margin: 16px 16px 0; }
-  .dateline { display: none; }
   /* Two rows: brand and status, then the buttons. */
   .actions { flex: 1 0 100%; flex-wrap: nowrap; justify-content: space-between; }
   .actions .btn { padding: 6px 10px; font-size: 13px; }

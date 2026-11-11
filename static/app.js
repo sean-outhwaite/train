@@ -678,7 +678,6 @@ function applyChartFont() {
   Chart.defaults.font.size = cssNum("--chart-font-size", 12);
 }
 
-$("#dateline").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 loadStatus();
 loadDashboard();
 api("/api/insights").then((d) => renderInsights(d.insights ? d : null));
