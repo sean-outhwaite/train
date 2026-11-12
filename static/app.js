@@ -585,6 +585,7 @@ async function loadStatus() {
     syncRow(s.data.synced_at),
     { ok: s.strava.tools > 0, text: s.strava.tools > 0 ? "Strava connector" : "Strava connector not found" },
   ];
+  $("#hr-zone-basis").value = s.settings.hr_zone_basis;
   const dot = (ok) => css(ok ? "--good" : "--warning");
   $("#status-list").innerHTML = rows.map((r) => `<li><span class="dot" style="background:${dot(r.ok)}"></span>${r.text}</li>`).join("");
   // The header stays quiet unless something needs attention.
@@ -626,6 +627,14 @@ $("#status-pop").addEventListener("beforetoggle", (e) => {
   const r = $("#btn-status").getBoundingClientRect();
   e.target.style.top = `${r.bottom + 6}px`;
   e.target.style.right = `${document.documentElement.clientWidth - r.right}px`;
+});
+$("#hr-zone-basis").addEventListener("change", async (e) => {
+  try {
+    await api("/api/settings", { method: "POST", body: JSON.stringify({ hr_zone_basis: e.target.value }) });
+  } catch (err) {
+    showBanner(`<b>Settings:</b> ${escapeHtml(err.message)}`);
+    loadStatus();
+  }
 });
 $("#btn-chat").addEventListener("click", () => openDrawer(true));
 $("#btn-close").addEventListener("click", () => openDrawer(false));

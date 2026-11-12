@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=13">
+  <link rel="stylesheet" href="/static/styles.css?v=14">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
@@ -41,7 +41,17 @@
       <button id="btn-import" class="btn sign" data-jp="取込">Manual import</button>
       <button id="btn-chat" class="btn sign accent" data-jp="質問">Ask Claude</button>
     </div>
-    <div id="status-pop" class="status-pop" popover><ul id="status-list"></ul></div>
+    <div id="status-pop" class="status-pop" popover>
+      <ul id="status-list"></ul>
+      <label class="setting">Heart-rate zones based on
+        <select id="hr-zone-basis">
+          <option value="">Not set</option>
+          <option value="max_hr">Max heart rate</option>
+          <option value="threshold_hr">Threshold heart rate</option>
+          <option value="hr_reserve">Heart-rate reserve</option>
+        </select>
+      </label>
+    </div>
   </header>
 
   <div id="banner" class="banner" hidden></div>
@@ -169,6 +179,6 @@
 
   <div id="tip" class="tip" role="tooltip" hidden></div>
 
-  <script src="/static/app.js?v=12"></script>
+  <script src="/static/app.js?v=13"></script>
 </body>
 </html>

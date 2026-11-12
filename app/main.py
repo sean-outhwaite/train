@@ -47,7 +47,22 @@ async def status():
         "data": {"activities": counts["acts"], "days": counts["days"], "demo": counts["demo"] > 0,
                  "latest": db.latest_date(conn), "synced_at": db.get_meta(conn, "garmin_synced_at")},
         "strava": {"discovered": strava is not None, "tools": len(strava["strava_tools"]) if strava else 0},
+        "settings": {"hr_zone_basis": db.get_meta(conn, "hr_zone_basis") or ""},
     }
+
+
+class SettingsRequest(BaseModel):
+    hr_zone_basis: str
+
+
+@app.post("/api/settings")
+def save_settings(req: SettingsRequest):
+    if req.hr_zone_basis and req.hr_zone_basis not in claude_cli.HR_ZONE_BASES:
+        raise HTTPException(400, "Unknown heart-rate zone basis.")
+    conn = db.connect()
+    db.set_meta(conn, "hr_zone_basis", req.hr_zone_basis)
+    conn.commit()
+    return {"hr_zone_basis": req.hr_zone_basis}
 
 
 @app.get("/api/dashboard")

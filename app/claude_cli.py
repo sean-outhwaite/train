@@ -60,7 +60,14 @@ def _check_limits(conversation_id: str | None) -> None:
         raise RunRejected(f"This chat has reached {MAX_CHAT_TURNS} messages, and each one resends the whole "
                           "conversation. Start a new chat to keep usage down.")
 
-SYSTEM_PROMPT = """You are a sports scientist and health coach analysing one person's own data.
+# What the user's heart-rate zones are based on, set in the UI. Fixed choices, so no free text reaches the prompt.
+HR_ZONE_BASES = {
+    "max_hr": "a percentage of max heart rate",
+    "threshold_hr": "lactate threshold heart rate",
+    "hr_reserve": "heart-rate reserve (Karvonen)",
+}
+
+_SYSTEM_PROMPT = """You are a sports scientist and health coach analysing one person's own data.
 
 Data sources:
 - healthdb tools: the user's Garmin history (activities + daily wellness) in a local SQLite database.
@@ -68,6 +75,10 @@ Data sources:
 - Strava tools (if available): live read-only access to the user's Strava account. Use them for
   things Garmin lacks - segments, kudos, Strava's Relative Effort / Fitness & Freshness, gear, or
   activities not recorded on Garmin. Never claim Strava data came from Garmin or vice versa.
+
+Heart-rate zones: Strava's zones say only whether they were set manually or estimated, not what they are
+based on. {hr_zone_basis} Refer to them by zone number and bpm range. Garmin activities have their own
+time-in-zone, based on the watch's zones, which may not match Strava's.
 
 Some metrics may be partial or absent. A gap means not recorded, not incomplete data, a zero or a problem.
 Call get_data_coverage before answering questions about wellness trends, and say plainly when something
@@ -80,6 +91,19 @@ How to answer:
 - Be concise and practical. Use short paragraphs or bullets. Metric units.
 - You are not a doctor. For symptoms or anything that looks medically concerning, say so plainly and
   suggest seeing a professional."""
+
+
+def system_prompt() -> str:
+    conn = db.connect()
+    try:
+        basis = HR_ZONE_BASES.get(db.get_meta(conn, "hr_zone_basis") or "")
+    finally:
+        conn.close()
+    return _SYSTEM_PROMPT.format(hr_zone_basis=(
+        f"The user says their heart-rate zones are based on {basis}." if basis else
+        "Don't assume they come from max HR, threshold HR or any other model, and don't call them "
+        "\"max-HR zones\" or similar. If the basis matters to the advice, say it is unknown."
+    ))
 
 
 def write_mcp_config() -> None:
@@ -136,7 +160,7 @@ def _base_args(json_schema: dict | None, resume: str | None, persist: bool) -> l
         "--mcp-config", str(MCP_CONFIG),
         "--tools", "",
         "--allowedTools", "mcp__healthdb", *_strava_allow(),
-        "--system-prompt", SYSTEM_PROMPT,
+        "--system-prompt", system_prompt(),
     ]
     if MODEL:
         args += ["--model", MODEL]
