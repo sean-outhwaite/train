@@ -414,7 +414,7 @@ function renderInsights(data) {
       <p>${withTerms(escapeHtml(ins.body))}</p>
       <div class="evidence">${withTerms(escapeHtml(ins.evidence))}</div>
       ${ins.chart_data ? `<div class="mini-wrap"></div>` : ""}
-      <button class="btn ask" data-i="${i}">Ask about this</button>`;
+      <button class="btn link ask" data-i="${i}">Ask about this<span class="arrow" aria-hidden="true">→</span></button>`;
     grid.appendChild(card);
     if (ins.chart_data) renderSpecChart(card.querySelector(".mini-wrap"), ins.chart_data, 130);
   });

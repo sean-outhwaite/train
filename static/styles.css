@@ -94,15 +94,35 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .status-pop select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text-primary); }
 
-.btn { font: inherit; font-weight: 500; padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border);
-  background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+/* Buttons are small square signs with a darker lower edge that presses in. */
+.btn { font: inherit; font-weight: 500; padding: 6px 14px 8px; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--surface-1); color: var(--text-primary); cursor: pointer; box-shadow: inset 0 -3px 0 var(--border); }
 .btn:hover { background: var(--surface-2); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
-  box-shadow: 0 2px 0 color-mix(in srgb, var(--accent) 60%, #000); }
+.btn:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 var(--border); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700;
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--accent) 60%, #000); }
 .btn.primary:hover { filter: brightness(1.08); }
-.btn.primary:active { transform: translateY(1px); box-shadow: none; }
-.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; }
+.btn.primary:active { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 60%, #000); }
+.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; border-radius: 6px; padding-bottom: 6px; }
+.btn.ghost:hover { background: var(--surface-2); }
 .btn:disabled { opacity: .55; cursor: progress; }
+/* The main action is a ticket: notched sides and a torn-off stub holding the Japanese label. */
+.btn.ticket { display: inline-flex; align-items: center; gap: 12px; padding: 8px 20px 10px 16px; border: 0;
+  flex-shrink: 0; white-space: nowrap;
+  --notch: radial-gradient(circle 7px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat,
+           radial-gradient(circle 7px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+  -webkit-mask: var(--notch); mask: var(--notch); }
+.btn.ticket::before { content: attr(data-jp); font-size: 11px; font-weight: 500; letter-spacing: .12em; opacity: .85;
+  padding-right: 12px; border-right: 2px dashed color-mix(in srgb, var(--accent-ink) 45%, transparent); }
+/* The mask would clip an outside focus ring, so draw it inside. */
+.btn.ticket:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -5px; }
+/* Secondary actions inside cards are plain links, so they don't compete with the content. */
+.btn.link { padding: 2px 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--accent);
+  font-weight: 700; }
+.btn.link:hover { background: none; text-decoration: underline; text-underline-offset: 3px; }
+.btn.link:active { transform: none; }
+.btn.link .arrow { display: inline-block; margin-left: 4px; transition: transform .15s ease; }
+.btn.link:hover .arrow { transform: translateX(3px); }
 /* Header buttons read like station signs: a small Japanese label over the English. The label comes
    from data-jp, so code that swaps the button text ("Syncing…") leaves it alone. */
 .btn.sign { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px;
@@ -174,7 +194,7 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .insight p { margin: 0; }
 .insight .evidence { font-size: 12px; color: var(--text-secondary); background: var(--surface-2); padding: 6px 8px; border-radius: 8px; }
 .insight .mini { position: relative; height: 140px; }
-.insight .ask { align-self: flex-start; margin-top: auto; border-color: var(--accent); color: var(--accent); }
+.insight .ask { align-self: flex-start; margin-top: auto; }
 .insights-empty { color: var(--text-muted); padding: 8px 0; }
 
 /* Progress: finished steps are stations along a line, the current one pulses like a platform light. */
@@ -235,8 +255,13 @@ td.num, th.num { text-align: right; }
 /* The drawer reads as a sign board, so its stripes don't run on from the page header's. */
 .drawer-head.stripes { background-image: linear-gradient(var(--stripe-2), var(--stripe-2));
   background-size: 100% 4px; background-position: 0 100%; }
-.drawer-head .btn.ghost { color: inherit; }
-.drawer-head .btn.ghost:hover { background: rgb(255 255 255 / .14); }
+/* On the dark sign board, the buttons get a light outline and lower edge so they read as buttons. */
+.drawer-head > div { display: flex; gap: 8px; }
+.drawer-head .btn.ghost { color: inherit; padding: 5px 12px 7px; border-radius: 4px; border-color: rgb(255 255 255 / .35);
+  background: rgb(255 255 255 / .08); box-shadow: inset 0 -3px 0 rgb(0 0 0 / .25); }
+.drawer-head .btn.ghost:hover { background: rgb(255 255 255 / .18); border-color: rgb(255 255 255 / .55); }
+.drawer-head .btn.ghost:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 rgb(0 0 0 / .25); }
+.drawer-head #btn-close { width: 34px; padding-left: 0; padding-right: 0; }
 .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .msg { max-width: 100%; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); padding: 8px 12px;
@@ -252,7 +277,7 @@ td.num, th.num { text-align: right; }
 .msg .chat-chart h4 { margin: 0 0 6px; font-size: 13px; }
 .msg .chat-chart .panel-chart { position: relative; height: 170px; }
 .composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
-.composer textarea { flex: 1; resize: none; font: inherit; padding: 9px 14px; border-radius: 18px;
+.composer textarea { flex: 1; resize: none; font: inherit; padding: 9px 12px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
 .composer .btn { align-self: flex-end; }
 .hint { font-size: 13px; }
@@ -296,6 +321,7 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .actions .btn.sign { flex: 1; padding: 5px 9px 6px; font-size: 12.5px; white-space: nowrap; }
   .status-btn { position: absolute; top: 10px; right: 16px; }
   .insight-grid { grid-template-columns: minmax(0, 1fr); }
+  .panel-head { flex-wrap: wrap; }
   .panel { padding: 16px; }
   #kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #kpis .kpi + .kpi { border-left: 0; }
