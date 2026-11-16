@@ -496,6 +496,8 @@ function updateTabs() {
   showTab(tabFromHash());
 }
 
+let currentTab = null;
+
 function showTab(name) {
   if ($(`#tabbtn-${name}`).hidden) name = "overview";
   for (const t of TABS) {
@@ -509,10 +511,52 @@ function showTab(name) {
   const nav = $(".tabs"), btn = $(`#tabbtn-${name}`);
   const off = btn.getBoundingClientRect().left - nav.getBoundingClientRect().left;
   if (off < 0 || off + btn.offsetWidth > nav.clientWidth) nav.scrollLeft += off - (nav.clientWidth - btn.offsetWidth) / 2;
+  moveRoute(name, currentTab != null && currentTab !== name);
+  currentTab = name;
   // Charts drawn while their tab was hidden have no size yet.
   const panel = $(`#tab-${name}`);
   for (const chart of charts.values()) if (panel.contains(chart.canvas)) chart.resize();
 }
+
+// Pulls away slowly and brakes into the stop. Stops light up when the line reaches them, so their delay comes
+// from this same curve: find the point on it where the line has covered `progress` of the trip.
+const ROUTE_EASE = [0.5, 0, 0.25, 1];
+function routeTimeAt(progress) {
+  const [x1, y1, x2, y2] = ROUTE_EASE;
+  const bez = (a, b, t) => 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 20; i++) { const mid = (lo + hi) / 2; if (bez(y1, y2, mid) < progress) lo = mid; else hi = mid; }
+  return bez(x1, x2, (lo + hi) / 2);
+}
+
+// The route line runs between the first and last visible stops. Its pink part (and the train) travel to the
+// current stop, and each stop on the way changes colour as the line reaches it.
+function moveRoute(name, animate) {
+  const nav = $(".tabs"), route = $(".route");
+  const visible = TABS.filter((t) => !$(`#tabbtn-${t}`).hidden);
+  const origin = nav.getBoundingClientRect().left - nav.scrollLeft;
+  const centre = (t) => { const r = $(`#tabbtn-${t} .stop`).getBoundingClientRect(); return r.left + r.width / 2 - origin; };
+  const start = centre(visible[0]);
+  const from = parseFloat(route.style.getPropertyValue("--fill")) || 0;
+  const to = centre(name) - start;
+  // Longer trips take longer, like a train: about a third of a second plus a little per stop.
+  const ms = animate ? Math.min(1100, 320 + Math.abs(to - from) * 1.1) : 0;
+  nav.style.setProperty("--ms", `${ms}ms`);
+  nav.style.setProperty("--ease", `cubic-bezier(${ROUTE_EASE.join(", ")})`);
+  route.style.left = `${start}px`;
+  route.style.width = `${centre(visible.at(-1)) - start}px`;
+  route.style.setProperty("--fill", `${to}px`);
+  if (to !== from) route.classList.toggle("reverse", to < from);
+  for (const t of visible) {
+    const x = centre(t) - start;
+    const reached = animate && to !== from ? Math.min(1, Math.max(0, (x - from) / (to - from))) : 0;
+    const stop = $(`#tabbtn-${t} .stop`);
+    stop.style.transitionDelay = `${Math.round(routeTimeAt(reached) * ms)}ms`;
+    $(`#tabbtn-${t}`).classList.toggle("past", x < to);
+  }
+}
+// Stops move when the window resizes, so put the line back without animating.
+new ResizeObserver(() => { if (currentTab) moveRoute(currentTab, false); }).observe($(".tabs"));
 
 // ---------- activity detail ----------
 const fmtDuration = (seconds) => {

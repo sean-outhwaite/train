@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=22">
+  <link rel="stylesheet" href="/static/styles.css?v=24">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
@@ -66,11 +66,20 @@
 
     <section id="dash" hidden>
       <nav class="tabs" role="tablist" aria-label="Dashboard sections">
-        <a class="tab" role="tab" id="tabbtn-overview" href="#overview" aria-controls="tab-overview" data-tab="overview" data-jp="概要">Overview</a>
-        <a class="tab" role="tab" id="tabbtn-training" href="#training" aria-controls="tab-training" data-tab="training" data-jp="練習">Training</a>
-        <a class="tab" role="tab" id="tabbtn-recovery" href="#recovery" aria-controls="tab-recovery" data-tab="recovery" data-jp="回復">Recovery</a>
-        <a class="tab" role="tab" id="tabbtn-performance" href="#performance" aria-controls="tab-performance" data-tab="performance" data-jp="記録">Performance</a>
-        <a class="tab" role="tab" id="tabbtn-activities" href="#activities" aria-controls="tab-activities" data-tab="activities" data-jp="運行">Activities</a>
+        <span class="route" aria-hidden="true">
+          <span class="route-fill"></span>
+          <span class="route-train"><svg viewBox="112 19 60 14"><g class="car">
+            <rect x="112" y="19" width="23" height="14" rx="2"/><path d="M137 33V21a2 2 0 0 1 2-2h13c8 0 16 5 20 14z"/>
+          </g><g class="glass">
+            <rect x="115" y="22" width="7" height="5" rx="1"/><rect x="125" y="22" width="7" height="5" rx="1"/>
+            <rect x="140" y="22" width="7" height="5" rx="1"/><path d="M150 22h2c5 0 9 2 12.5 5H150z"/>
+          </g></svg></span>
+        </span>
+        <a class="tab" role="tab" id="tabbtn-overview" href="#overview" aria-controls="tab-overview" data-tab="overview"><span class="stop" aria-hidden="true">T01</span><span class="name">Overview</span><span class="jp" lang="ja" aria-hidden="true">概要</span></a>
+        <a class="tab" role="tab" id="tabbtn-training" href="#training" aria-controls="tab-training" data-tab="training"><span class="stop" aria-hidden="true">T02</span><span class="name">Training</span><span class="jp" lang="ja" aria-hidden="true">練習</span></a>
+        <a class="tab" role="tab" id="tabbtn-recovery" href="#recovery" aria-controls="tab-recovery" data-tab="recovery"><span class="stop" aria-hidden="true">T03</span><span class="name">Recovery</span><span class="jp" lang="ja" aria-hidden="true">回復</span></a>
+        <a class="tab" role="tab" id="tabbtn-performance" href="#performance" aria-controls="tab-performance" data-tab="performance"><span class="stop" aria-hidden="true">T04</span><span class="name">Performance</span><span class="jp" lang="ja" aria-hidden="true">記録</span></a>
+        <a class="tab" role="tab" id="tabbtn-activities" href="#activities" aria-controls="tab-activities" data-tab="activities"><span class="stop" aria-hidden="true">T05</span><span class="name">Activities</span><span class="jp" lang="ja" aria-hidden="true">運行</span></a>
       </nav>
 
     <section class="tab-panel" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview" hidden>
@@ -275,6 +284,6 @@
 
   <div id="tip" class="tip" role="tooltip" hidden></div>
 
-  <script src="/static/app.js?v=20"></script>
+  <script src="/static/app.js?v=22"></script>
 </body>
 </html>
