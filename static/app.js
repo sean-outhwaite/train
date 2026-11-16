@@ -228,18 +228,53 @@ function renderBenchmarks(b) {
   $("#bench-tiles").hidden = !tiles;
   $("#bench-tiles").innerHTML = tiles;
 
-  const fmtRecord = (r) => ({
-    time: () => fmtDuration(r.value), distance: () => `${fmtNum(r.value / 1000, 2)} km`,
-    elevation: () => `${fmtNum(r.value, 0)} m`, power: () => `${fmtNum(r.value, 0)} W`, count: () => fmtNum(r.value, 0),
-    days: () => `${fmtNum(r.value, 0)} days`,
-  }[r.kind] || (() => fmtNum(r.value)))();
-  const records = b?.records || [];
-  $("#records").hidden = !records.length;
-  $("#records").innerHTML = records.length ? `<thead><tr><th>Personal record</th><th>Sport</th><th class="num">Best</th><th class="num">Set on</th></tr></thead>
-    <tbody>${records.map((r) => `<tr${r.source_id ? ` data-id="${escapeHtml(r.source_id)}" tabindex="0"` : ""}>
-      <td>${escapeHtml(r.label)}</td><td>${titleCase(r.sport)}</td><td class="num">${fmtRecord(r)}</td>
-      <td class="num">${r.date ? fmtLongDate(r.date) : ""}</td></tr>`).join("")}</tbody>` : "";
-  $("#bench-card").hidden = !tiles && !records.length;
+  $("#bench-card").hidden = !tiles;
+  renderRecords(b?.records || []);
+}
+
+// Personal records as cards grouped by sport. Timed records at a fixed distance also show the pace.
+const RECORD_GROUPS = ["running", "cycling", "swimming", "steps"];
+const RECORD_NEW_DAYS = 30;
+const recordParts = (r) => ({
+  time: () => [fmtDuration(r.value), ""], distance: () => [fmtNum(r.value / 1000, 2), "km"],
+  elevation: () => [fmtNum(r.value, 0), "m"], power: () => [fmtNum(r.value, 0), "W"],
+  count: () => [fmtNum(r.value, 0), ""], days: () => [fmtNum(r.value, 0), "days"],
+}[r.kind] || (() => [fmtNum(r.value), ""]))();
+
+function daysAgo(iso) {
+  const today = new Date(localISO(new Date()) + "T00:00:00");
+  return Math.round((today - new Date(iso + "T00:00:00")) / 86_400_000);
+}
+function fmtAgo(days) {
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  if (days < 45) return rtf.format(-days, "day");
+  if (days < 365) return rtf.format(-Math.round(days / 30.44), "month");
+  return rtf.format(-Math.round(days / 365.25), "year");
+}
+
+function renderRecords(records) {
+  $("#records-card").hidden = !records.length;
+  const sports = [...new Set(records.map((r) => r.sport))]
+    .sort((x, y) => (RECORD_GROUPS.indexOf(x) + 1 || 99) - (RECORD_GROUPS.indexOf(y) + 1 || 99));
+  $("#records").innerHTML = sports.map((sport) => {
+    const color = sportColor(sport === "steps" ? "walking" : sport);
+    const cards = records.filter((r) => r.sport === sport).map((r) => {
+      const [value, unit] = recordParts(r);
+      const age = r.date != null ? daysAgo(r.date) : null;
+      const pace = r.kind === "time" && r.distance_m ? fmtSpeed(r.distance_m / r.value, r.sport) : null;
+      const when = age == null ? null : `<time datetime="${r.date}" title="${fmtLongDate(r.date)}">${fmtAgo(age)}</time>`;
+      return `<article class="record-card">
+        <div class="record-top"><h4>${escapeHtml(r.label)}</h4>${age != null && age <= RECORD_NEW_DAYS ? '<span class="badge-new">New</span>' : ""}</div>
+        <div class="record-value">${value}${unit ? `<small>${unit}</small>` : ""}</div>
+        <div class="record-meta">${[pace, when].filter(Boolean).join(" · ")}</div>
+        ${r.source_id ? `<button class="btn link" data-id="${escapeHtml(r.source_id)}">${escapeHtml(r.activity_name || "View activity")}<span class="arrow" aria-hidden="true">→</span></button>` : ""}
+      </article>`;
+    }).join("");
+    return `<section class="record-group" style="--sport: ${color}">
+      <h3 class="record-group-head"><span>${titleCase(sport)}</span></h3>
+      <div class="record-grid">${cards}</div>
+    </section>`;
+  }).join("");
 }
 
 // Active gear by distance; a bar against the retirement distance when one is set in Garmin.
@@ -418,7 +453,10 @@ function renderKpis(kpis) {
   }).join("");
 }
 
-function renderActivities(acts) {
+const RECENT_ACTIVITIES = 5;
+let sportFilter = "";
+
+function activityTable(acts) {
   const rows = acts.map((a) => `<tr data-id="${escapeHtml(a.source_id)}">
     <td>${new Date(a.start_time).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</td>
     <td><span class="pill"><span class="dot" style="background:${sportColor(a.sport)}"></span>${a.sport}</span></td>
@@ -428,8 +466,52 @@ function renderActivities(acts) {
     <td class="num">${a.avg_hr ? fmtNum(a.avg_hr, 0) + " bpm" : "–"}</td>
     <td class="num">${a.training_effect == null ? "–" : Number(a.training_effect).toFixed(1)}</td>
   </tr>`).join("");
-  $("#acts").innerHTML = `<thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Distance</th>
+  return `<thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Distance</th>
     <th class="num">Time</th><th class="num">Avg HR</th><th class="num">${withTerms("Aerobic TE")}</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+function renderActivities(acts) {
+  $("#acts-recent").innerHTML = activityTable(acts.slice(0, RECENT_ACTIVITIES));
+  const sports = [...new Set(acts.map((a) => a.sport))].sort();
+  if (!sports.includes(sportFilter)) sportFilter = "";
+  // A filter is only worth showing when there's more than one sport to pick between.
+  $("#sport-filter").innerHTML = sports.length < 2 ? "" : ["", ...sports].map((sp) =>
+    `<button class="chip" data-sport="${escapeHtml(sp)}" aria-pressed="${sp === sportFilter}">${sp
+      ? `<span class="dot" style="background:${sportColor(sp)}"></span>${escapeHtml(titleCase(sp))}` : "All"}</button>`).join("");
+  const shown = sportFilter ? acts.filter((a) => a.sport === sportFilter) : acts;
+  $("#acts").innerHTML = activityTable(shown);
+  $("#acts-note").textContent = `${shown.length} most recent${sportFilter ? ` ${sportFilter}` : ""} activit${shown.length === 1 ? "y" : "ies"}`;
+}
+
+// ---------- tabs ----------
+const TABS = ["overview", "training", "recovery", "performance", "activities"];
+const tabFromHash = () => { const t = location.hash.slice(1); return TABS.includes(t) ? t : "overview"; };
+
+// A tab with nothing recorded is hidden, like an empty chart.
+function updateTabs() {
+  for (const name of TABS) {
+    const hasContent = name === "overview" || $(`#tab-${name}`).querySelector(".panel:not([hidden])");
+    $(`#tabbtn-${name}`).hidden = !hasContent;
+  }
+  showTab(tabFromHash());
+}
+
+function showTab(name) {
+  if ($(`#tabbtn-${name}`).hidden) name = "overview";
+  for (const t of TABS) {
+    const active = t === name;
+    $(`#tab-${t}`).hidden = !active;
+    const btn = $(`#tabbtn-${t}`);
+    btn.setAttribute("aria-selected", active);
+    btn.tabIndex = active ? 0 : -1;
+  }
+  // On narrow screens the tab bar scrolls sideways, so bring the current tab into view.
+  const nav = $(".tabs"), btn = $(`#tabbtn-${name}`);
+  const off = btn.getBoundingClientRect().left - nav.getBoundingClientRect().left;
+  if (off < 0 || off + btn.offsetWidth > nav.clientWidth) nav.scrollLeft += off - (nav.clientWidth - btn.offsetWidth) / 2;
+  // Charts drawn while their tab was hidden have no size yet.
+  const panel = $(`#tab-${name}`);
+  for (const chart of charts.values()) if (panel.contains(chart.canvas)) chart.resize();
 }
 
 // ---------- activity detail ----------
@@ -636,6 +718,7 @@ async function loadDashboard() {
   renderKpis(dashData.kpis);
   renderCharts(dashData);
   renderActivities(dashData.activities);
+  updateTabs();
 }
 
 // ---------- insights ----------
@@ -868,17 +951,39 @@ function escapeHtml(s) {
 
 // ---------- wiring ----------
 $("#btn-insights").addEventListener("click", generateInsights);
-$("#acts").addEventListener("click", (e) => {
-  const row = e.target.closest("tr[data-id]");
-  if (row) openActivity(row.dataset.id);
-});
+for (const table of document.querySelectorAll("table.acts")) {
+  table.addEventListener("click", (e) => {
+    const row = e.target.closest("tr[data-id]");
+    if (row) openActivity(row.dataset.id);
+  });
+}
 $("#records").addEventListener("click", (e) => {
-  const row = e.target.closest("tr[data-id]");
-  if (row) openActivity(row.dataset.id);
+  const btn = e.target.closest("[data-id]");
+  if (btn) openActivity(btn.dataset.id);
 });
-$("#records").addEventListener("keydown", (e) => {
-  const row = e.target.closest("tr[data-id]");
-  if (row && e.key === "Enter") openActivity(row.dataset.id);
+$("#sport-filter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  sportFilter = chip.dataset.sport;
+  renderActivities(dashData.activities);
+});
+window.addEventListener("hashchange", () => {
+  showTab(tabFromHash());
+  // Keep the tab bar in view when switching from far down a long tab.
+  if (window.scrollY > $(".tabs").offsetTop) window.scrollTo({ top: 0 });
+});
+// The logo goes back to the overview. Already there, the hash doesn't change, so just scroll to the top.
+$(".brand-link").addEventListener("click", () => {
+  if (location.hash === "#overview") window.scrollTo({ top: 0 });
+});
+// Arrow keys move between tabs, as in other tab lists.
+$(".tabs").addEventListener("keydown", (e) => {
+  const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+  if (!step) return;
+  const visible = [...document.querySelectorAll(".tab:not([hidden])")];
+  const next = visible[(visible.indexOf(document.activeElement) + step + visible.length) % visible.length];
+  next.focus();
+  next.click();
 });
 $("#activity-dialog").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) e.currentTarget.close();

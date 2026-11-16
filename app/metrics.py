@@ -251,6 +251,11 @@ BENCHMARKS = {"lt_hr": ("Threshold heart rate", "bpm"), "lt_speed": ("Threshold 
               "lt_power": ("Threshold running power", "W"), "ftp": ("Cycling FTP", "W")}
 
 
+# Distance in metres of each fixed-distance Garmin record type (see garmin_sync.PR_TYPES), so pace can be shown.
+RECORD_DISTANCES = {1: 1000, 2: 1609.344, 3: 5000, 4: 10_000, 5: 21_097.5, 6: 42_195, 11: 40_000,
+                    18: 100, 20: 400, 22: 750, 23: 1000, 25: 1500}
+
+
 def benchmarks(conn: sqlite3.Connection, days: int = 365) -> dict:
     """Each benchmark's latest value against its earliest in the last `days`, plus personal records."""
     since = (date.today() - timedelta(days=days)).isoformat()
@@ -263,9 +268,9 @@ def benchmarks(conn: sqlite3.Connection, days: int = 365) -> dict:
         thresholds.append({"metric": metric, "label": label, "unit": unit,
                            "latest": rows[-1]["value"], "latest_date": rows[-1]["date"],
                            "first": recent[0]["value"], "first_date": recent[0]["date"]})
-    records = [_present(dict(r)) for r in conn.execute(
-        "SELECT p.type_id, p.label, p.sport, p.kind, p.value, p.date, a.source_id FROM personal_records p "
-        "LEFT JOIN activities a USING (source_id) ORDER BY p.type_id")]
+    records = [_present({**dict(r), "distance_m": RECORD_DISTANCES.get(r["type_id"])}) for r in conn.execute(
+        "SELECT p.type_id, p.label, p.sport, p.kind, p.value, p.date, a.source_id, a.name AS activity_name "
+        "FROM personal_records p LEFT JOIN activities a USING (source_id) ORDER BY p.type_id")]
     return {"thresholds": thresholds, "records": records}
 
 

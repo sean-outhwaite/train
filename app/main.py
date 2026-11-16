@@ -73,7 +73,7 @@ def dashboard(days: int = 90):
     frame = metrics.daily_frame(conn, max(14, min(days, 365)))
     acts = [dict(r) for r in conn.execute(
         "SELECT source_id, start_time, sport, name, distance_m, duration_s, avg_hr, elev_gain_m, training_effect "
-        "FROM activities ORDER BY start_time DESC LIMIT 25")]
+        "FROM activities ORDER BY start_time DESC LIMIT 200")]
     return {
         "empty": False,
         "kpis": metrics.kpis(conn),

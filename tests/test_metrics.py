@@ -240,3 +240,17 @@ def test_benchmarks_compare_with_a_year_ago(conn):
         db.upsert_row(conn, "benchmarks", {"date": d.isoformat(), "metric": "lt_hr", "value": v})
     (t,) = metrics.benchmarks(conn)["thresholds"]
     assert (t["first"], t["first_date"], t["latest"]) == (170, mid.isoformat(), 174)
+
+
+def test_records_carry_activity_name_and_distance(conn):
+    db.upsert_activity(conn, {"source_id": "a1", "start_time": "2026-01-01T07:00:00", "sport": "running",
+                              "name": "Morning run"})
+    db.replace_rows(conn, "personal_records", [
+        {"type_id": 3, "label": "5K", "sport": "running", "kind": "time", "value": 1300, "date": "2026-01-01",
+         "source_id": "a1"},
+        {"type_id": 12, "label": "Most steps in a day", "sport": "steps", "kind": "count", "value": 20000,
+         "date": "2026-01-02", "source_id": "gone"},
+    ])
+    five_k, steps = metrics.benchmarks(conn)["records"]
+    assert (five_k["activity_name"], five_k["distance_m"], five_k["source_id"]) == ("Morning run", 5000, "a1")
+    assert "distance_m" not in steps and "activity_name" not in steps and "source_id" not in steps
