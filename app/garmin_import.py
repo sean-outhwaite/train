@@ -107,6 +107,8 @@ def _uds_row(d: dict) -> dict:
         "stress_avg": stress if (stress or 0) >= 0 else None,
         "body_battery_high": bb.get("HIGHEST"),
         "body_battery_low": bb.get("LOWEST"),
+        "intensity_moderate_min": d.get("moderateIntensityMinutes"),
+        "intensity_vigorous_min": d.get("vigorousIntensityMinutes"),
     }
 
 
@@ -116,6 +118,12 @@ def _sleep_row(s: dict) -> dict:
         "date": s.get("calendarDate"),
         "sleep_s": total,
         "sleep_score": (s.get("sleepScores") or {}).get("overallScore"),
+        "deep_sleep_s": s.get("deepSleepSeconds"),
+        "light_sleep_s": s.get("lightSleepSeconds"),
+        "rem_sleep_s": s.get("remSleepSeconds"),
+        "awake_sleep_s": s.get("awakeSleepSeconds"),
+        "respiration_avg": s.get("averageRespiration") or s.get("averageRespirationValue"),
+        "spo2_avg": (s.get("spo2SleepSummary") or {}).get("averageSPO2") or s.get("averageSpO2Value"),
     }
 
 

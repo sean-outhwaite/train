@@ -87,6 +87,7 @@ Look for: training load trend and ramp rate, current form (TSB), fitness directi
 consistency, and anything unusual in the last two weeks. Include recovery signals and how they respond to
 load, using only the metrics that were recorded. Where Garmin's own readiness, training status, load or race
 predictions were recorded, say where they agree or disagree with this app's TRIMP-based form and fitness.
+Recent activities include the weather where known: allow for heat and humidity when reading heart rate.
 You may call the healthdb tools to check details first.
 
 If Strava tools are available, use get_athlete_best_efforts and get_athlete_zones where they add something

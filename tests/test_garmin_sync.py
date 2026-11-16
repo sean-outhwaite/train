@@ -104,7 +104,7 @@ class FakeClient(FakeGarmin):
         return []
 
     def __getattr__(self, name):
-        return lambda *args: {}
+        return lambda *args, **kwargs: {}
 
 
 def test_range_metrics_backfill_once(conn, monkeypatch):
@@ -118,3 +118,59 @@ def test_range_metrics_backfill_once(conn, monkeypatch):
     assert len(g.calls) == 1 and (date.today() - date.fromisoformat(g.calls[0][0])).days == 3
     assert conn.execute("SELECT training_readiness FROM daily WHERE date = '2024-03-10'").fetchone()[0] == 70
     assert conn.execute("SELECT level, load_pct FROM readiness WHERE date = '2024-03-10'").fetchone()[:] == ("HIGH", 90)
+
+
+
+# --- activities, benchmarks and gear ----------------------------------------
+
+def test_weather_is_metric_and_has_no_position():
+    row = gs.weather_row("garmin-1", {"temp": 68, "apparentTemp": 72, "dewPoint": 50, "relativeHumidity": 60,
+                                      "windSpeed": 10, "windDirectionCompassPoint": "sw", "latitude": 1.0,
+                                      "longitude": 2.0, "weatherTypeDTO": {"desc": "Fair"}})
+    assert row == {"source_id": "garmin-1", "temp_c": 20.0, "feels_like_c": 22.2, "dew_point_c": 10.0,
+                   "humidity_pct": 60, "wind_kph": 16.1, "wind_dir": "SW", "conditions": "Fair"}
+    assert gs.weather_row("garmin-2", {})["temp_c"] is None
+
+
+def test_laps_leave_out_positions():
+    laps = gs.lap_rows("garmin-1", {"lapDTOs": [
+        {"lapIndex": 1, "distance": 1000.0, "duration": 300.0, "averageHR": 150.0, "startLatitude": 1.0,
+         "endLongitude": 2.0, "averageRunCadence": 170.0, "intensityType": "ACTIVE"},
+        {"distance": 500.0, "averageBikeCadence": 90.0},
+    ]})
+    assert [lap["lap_index"] for lap in laps] == [1, 2]
+    assert laps[0]["avg_cadence"] == 170.0 and laps[1]["avg_cadence"] == 90.0
+    assert not any("lat" in k.lower() or "lon" in k.lower() for lap in laps for k in lap)
+
+
+def test_personal_records_keep_known_types_only():
+    rows = gs.pr_rows([
+        {"typeId": 3, "value": 1300.0, "activityId": 9, "activityStartDateTimeLocalFormatted": "2024-03-10T07:00:00.0"},
+        {"typeId": 15, "value": 0.0},          # no streak yet
+        {"typeId": 30, "value": 80_000.0},     # strength: units unknown
+        {"typeId": 12, "value": 25_000.0, "prStartTimeGmtFormatted": "2024-02-01T00:00:00.0"},
+    ])
+    assert rows == [
+        {"type_id": 3, "label": "5K", "sport": "running", "kind": "time", "value": 1300.0, "date": "2024-03-10",
+         "source_id": "garmin-9"},
+        {"type_id": 12, "label": "Most steps in a day", "sport": "steps", "kind": "count", "value": 25_000.0,
+         "date": "2024-02-01", "source_id": None},
+    ]
+
+
+def test_threshold_speed_is_scaled_to_metres_per_second():
+    lt = {"speed": [{"from": "2024-03-01T00:00:00.0", "value": 0.32}],
+          "heart_rate": [{"from": "2024-03-01T00:00:00.0", "value": 175.0}], "power": []}
+    rows = gs.benchmark_rows(lt, {"functionalThresholdPower": None})
+    assert rows == [{"date": "2024-03-01", "metric": "lt_hr", "value": 175.0},
+                    {"date": "2024-03-01", "metric": "lt_speed", "value": 3.2}]
+    assert gs.benchmark_rows({}, {"functionalThresholdPower": 250, "calendarDate": "2024-03-02"}) == [
+        {"date": "2024-03-02", "metric": "ftp", "value": 250}]
+
+
+def test_gear_row_names_and_distance():
+    item = {"uuid": "u1", "displayName": None, "customMakeModel": None, "gearMakeName": "Make",
+            "gearModelName": "Model", "gearTypeName": "Shoes", "gearStatusName": "active",
+            "dateBegin": "2024-01-01T00:00:00.0", "maximumMeters": 0.0}
+    row = gs.gear_row(item, {"totalDistance": 123_000.0, "totalActivities": 20})
+    assert (row["name"], row["max_m"], row["distance_m"], row["date_begin"]) == ("Make Model", None, 123_000.0, "2024-01-01")

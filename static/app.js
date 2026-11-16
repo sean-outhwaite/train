@@ -17,6 +17,8 @@ const withAlpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2,
 // Optional numeric design tokens, with the default design's value as the fallback.
 const cssNum = (name, fallback) => { const v = parseFloat(css(name)); return Number.isNaN(v) ? fallback : v; };
 
+// YYYY-MM-DD in local time (toISOString would shift it to UTC).
+const localISO = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 const fmtDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const fmtNum = (v, d = 1) => (v == null ? "–" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d }));
 const rolling = (vals, n = 7) => vals.map((_, i) => {
@@ -32,6 +34,7 @@ const TERMS = {
   TRIMP: "Training Impulse: training load worked out from a session's duration and average heart rate.",
   HRV: "Heart Rate Variability: how much the time between heartbeats varies, in milliseconds. Compare it with your own baseline, not other people's.",
   TE: "Training Effect: Garmin's 0 to 5 score for how much a session improved your aerobic or anaerobic fitness.",
+  SpO2: "Blood oxygen saturation, measured at the wrist while you sleep. Wrist readings are noisy, so look at the trend rather than single nights.",
   "VO2 max": "The most oxygen your body can use during hard exercise, in ml/kg/min. A common marker of aerobic fitness.",
 };
 const TERM_RE = new RegExp(`\\b(${Object.keys(TERMS).join("|")})\\b`, "g");
@@ -170,7 +173,23 @@ function renderCharts(d) {
   };
   drawIfData("c-rhr", "resting_hr", () => dailyPlusAvg("resting_hr", "Resting HR", "bpm"));
   drawIfData("c-hrv", "hrv_avg", () => dailyPlusAvg("hrv_avg", "HRV", "ms"));
-  drawIfData("c-sleep", "sleep_h", () => ({ data: { labels, datasets: [bar("Sleep", col("sleep_h"), css("--series-1"), { maxBarThickness: 8 })] }, options: singleSeries({ unit: "h" }) }));
+  // Stages when the watch recorded them, total hours otherwise.
+  const hasStages = col("sleep_deep_h").some((v) => v != null);
+  $("#sleep-note").textContent = hasStages ? "hours per night, by stage" : "hours per night";
+  drawIfData("c-sleep", "sleep_h", () => hasStages ? {
+    data: { labels, datasets: [
+      ["Deep", "sleep_deep_h", "--series-5"], ["Light", "sleep_light_h", "--series-1"],
+      ["REM", "sleep_rem_h", "--series-8"], ["Awake", "sleep_awake_h", "--series-6"],
+    ].map(([label, key, color]) => bar(label, col(key), css(color), { maxBarThickness: 8, borderWidth: 0, borderRadius: 0 }))
+      // Nights the watch timed but didn't split into stages.
+      .concat(d.daily.some((r) => r.sleep_h != null && r.sleep_deep_h == null)
+        ? [bar("Not staged", d.daily.map((r) => (r.sleep_deep_h == null ? r.sleep_h : null)), withAlpha(css("--text-muted"), 0.5), { maxBarThickness: 8, borderWidth: 0, borderRadius: 0 })]
+        : []) },
+    options: baseOptions({ stacked: true, unit: "h" }),
+  } : { data: { labels, datasets: [bar("Sleep", col("sleep_h"), css("--series-1"), { maxBarThickness: 8 })] }, options: singleSeries({ unit: "h" }) });
+  drawIfData("c-resp", "respiration_avg", () => dailyPlusAvg("respiration_avg", "Breathing", "brpm"));
+  drawIfData("c-spo2", "spo2_avg", () => dailyPlusAvg("spo2_avg", "SpO2", "%"));
+  drawIntensity(d.daily);
   drawIfData("c-stress", "stress_avg", () => ({ data: { labels, datasets: [line("Stress", col("stress_avg"), css("--series-1"))] }, options: singleSeries() }));
 
   drawReadiness(d, labels, col("training_readiness"));
@@ -181,6 +200,87 @@ function renderCharts(d) {
   drawIfData("c-endurance", "endurance_score", () => ({ data: { labels, datasets: [line("Endurance score", col("endurance_score"), css("--series-1"))] }, options: singleSeries() }));
   drawIfData("c-hill", "hill_score", () => ({ data: { labels, datasets: [line("Hill score", col("hill_score"), css("--series-1"))] }, options: singleSeries() }));
   renderRacePredictions(d.daily);
+  renderBenchmarks(d.benchmarks);
+  renderGear(d.gear);
+}
+
+const fmtLongDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+// Threshold tiles compare the latest value with the earliest in the last year. Pace is shown per km.
+function renderBenchmarks(b) {
+  const tiles = (b?.thresholds || []).map((t) => {
+    const isPace = t.metric === "lt_speed";
+    const [value, unit] = isPace ? speedParts(t.latest, "running") : [fmtNum(t.latest, 0), t.unit];
+    let delta = "no earlier value";
+    if (t.first_date !== t.latest_date) {
+      if (isPace) {
+        const secs = 1000 / t.latest - 1000 / t.first;
+        delta = Math.abs(secs) < 1 ? "■ no change" : `${secs < 0 ? "▲" : "▼"} ${fmtDuration(Math.abs(secs))} /km ${secs < 0 ? "faster" : "slower"}`;
+      } else {
+        const diff = t.latest - t.first;
+        delta = Math.abs(diff) < 0.5 ? "■ no change" : `${diff > 0 ? "▲" : "▼"} ${fmtNum(Math.abs(diff), 0)} ${t.unit}`;
+      }
+      delta += ` since ${fmtLongDate(t.first_date)}`;
+    }
+    return `<div class="kpi"><div class="label">${t.label}</div><div class="value">${value}<small>${unit}</small></div>
+      <div class="delta">${delta}</div></div>`;
+  }).join("");
+  $("#bench-tiles").hidden = !tiles;
+  $("#bench-tiles").innerHTML = tiles;
+
+  const fmtRecord = (r) => ({
+    time: () => fmtDuration(r.value), distance: () => `${fmtNum(r.value / 1000, 2)} km`,
+    elevation: () => `${fmtNum(r.value, 0)} m`, power: () => `${fmtNum(r.value, 0)} W`, count: () => fmtNum(r.value, 0),
+    days: () => `${fmtNum(r.value, 0)} days`,
+  }[r.kind] || (() => fmtNum(r.value)))();
+  const records = b?.records || [];
+  $("#records").hidden = !records.length;
+  $("#records").innerHTML = records.length ? `<thead><tr><th>Personal record</th><th>Sport</th><th class="num">Best</th><th class="num">Set on</th></tr></thead>
+    <tbody>${records.map((r) => `<tr${r.source_id ? ` data-id="${escapeHtml(r.source_id)}" tabindex="0"` : ""}>
+      <td>${escapeHtml(r.label)}</td><td>${titleCase(r.sport)}</td><td class="num">${fmtRecord(r)}</td>
+      <td class="num">${r.date ? fmtLongDate(r.date) : ""}</td></tr>`).join("")}</tbody>` : "";
+  $("#bench-card").hidden = !tiles && !records.length;
+}
+
+// Active gear by distance; a bar against the retirement distance when one is set in Garmin.
+function renderGear(g) {
+  const items = g?.active || [];
+  $("#gear-card").hidden = !items.length;
+  $("#gear-note").textContent = "distance logged in Garmin" + (g?.retired ? ` · ${g.retired} retired` : "");
+  $("#gear-list").innerHTML = items.map((i) => {
+    const km = fmtNum((i.distance_m || 0) / 1000, 0);
+    const since = i.date_begin ? ` · since ${fmtLongDate(i.date_begin)}` : "";
+    return `<li class="gear-item${i.warn ? " warn" : ""}">
+      <div class="top"><span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
+        <span>${km} km${i.max_m ? ` <span class="muted">of ${fmtNum(i.max_m / 1000, 0)} km</span>` : ""}</span></div>
+      <div class="top"><span class="muted">${escapeHtml(i.type || "")}${i.activities ? ` · ${i.activities} activities` : ""}${since}</span>
+        ${i.warn ? `<span class="flag">${i.worn >= 1 ? "Past its retirement distance" : "Nearly due for retirement"}</span>` : ""}</div>
+      ${i.max_m ? `<div class="track"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></div>` : ""}
+    </li>`;
+  }).join("");
+}
+
+// Weekly intensity minutes (vigorous counted double) against the common 150-minute guideline.
+function drawIntensity(daily) {
+  const canvas = $("#c-intensity");
+  const weeks = [];
+  for (const r of daily) {
+    const day = new Date(r.date + "T00:00:00");
+    const monday = new Date(day); monday.setDate(day.getDate() - ((day.getDay() + 6) % 7));
+    const key = localISO(monday);
+    if (!weeks.length || weeks.at(-1).key !== key) weeks.push({ key, label: fmtDate(key), total: null });
+    if (r.intensity_min != null) weeks.at(-1).total = (weeks.at(-1).total || 0) + r.intensity_min;
+  }
+  const card = canvas.closest(".chart-card");
+  card.hidden = !weeks.some((w) => w.total != null);
+  if (card.hidden) { charts.get(canvas)?.destroy(); charts.delete(canvas); return; }
+  draw(canvas, {
+    data: { labels: weeks.map((w) => w.label), datasets: [
+      bar("Intensity minutes", weeks.map((w) => w.total), css("--series-3")),
+      line("150-minute guideline", weeks.map(() => 150), css("--text-muted"), { borderDash: [5, 4], borderWidth: 1.5, pointHoverRadius: 0 }),
+    ] },
+    options: baseOptions({ unit: "min" }),
+  });
 }
 
 // Garmin's readiness levels, as background bands on the trend. Colour carries the level everywhere.
@@ -240,9 +340,7 @@ function renderReadinessNow(r) {
   const box = $("#readiness-now");
   if (!r) { box.innerHTML = ""; return; }
   const level = LEVEL_COLOR[r.level] || "--text-primary";
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const when = r.date === today ? "This morning" : `Morning of ${fmtDate(r.date)}`;
+  const when = r.date === localISO(new Date()) ? "This morning" : `Morning of ${fmtDate(r.date)}`;
   const factors = r.factors || [];
   const weakest = factors.length ? factors.reduce((a, b) => (b.percent < a.percent ? b : a)) : null;
   box.innerHTML = `
@@ -476,8 +574,58 @@ async function openActivity(id) {
   const dialog = $("#activity-dialog");
   dialog.showModal();
   dialog.scrollTop = 0;
+  $("#act-laps-card").hidden = true;  // until this activity's laps arrive
   renderActivity(activityData);
   if (activityData.has_route) loadRoute(activityData);
+  loadExtras(activityData);
+}
+
+async function loadExtras(a) {
+  try {
+    a.extras = await api(`/api/activities/${encodeURIComponent(a.source_id)}/extras`);
+  } catch {
+    return;
+  }
+  if (a === activityData && $("#activity-dialog").open) renderExtras(a);
+}
+
+// Weather joins the stat groups; laps get their own table, with only the columns that have data.
+function renderExtras(a) {
+  const w = a.extras.weather || {};
+  const rows = [
+    ["Conditions", w.conditions],
+    ["Air temperature", w.temp_c != null && `${fmtNum(w.temp_c, 0)} °C${w.feels_like_c != null && Math.abs(w.feels_like_c - w.temp_c) >= 1 ? ` (feels ${fmtNum(w.feels_like_c, 0)} °C)` : ""}`],
+    ["Humidity", withUnit(w.humidity_pct, "%")],
+    ["Dew point", w.dew_point_c != null && `${fmtNum(w.dew_point_c, 0)} °C`],
+    ["Wind", w.wind_kph != null && `${fmtNum(w.wind_kph, 0)} km/h${w.wind_dir ? ` ${w.wind_dir}` : ""}`],
+  ].filter(([, v]) => v);
+  $("#act-weather")?.remove();
+  if (rows.length) {
+    $("#act-groups").insertAdjacentHTML("beforeend", `<section id="act-weather"><h3>Weather</h3><dl>${rows.map(([label, value]) =>
+      `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl></section>`);
+  }
+
+  const laps = a.extras.laps;
+  $("#act-laps-card").hidden = !laps.length;
+  if (!laps.length) return;
+  const pace = hasPace(a.sport);
+  const cols = [
+    ["#", (l) => l.lap_index],
+    ["Distance", (l) => l.distance_m != null && `${fmtNum(l.distance_m / 1000, 2)} km`],
+    ["Time", (l) => l.duration_s != null && fmtDuration(l.duration_s)],
+    [pace ? "Pace" : "Speed", (l) => fmtSpeed(l.avg_speed, a.sport)],
+    ["Grade adj.", (l) => fmtSpeed(l.gap_speed, a.sport)],
+    ["Avg HR", (l) => l.avg_hr != null && fmtNum(l.avg_hr, 0)],
+    ["Max HR", (l) => l.max_hr != null && fmtNum(l.max_hr, 0)],
+    ["Power", (l) => l.avg_power != null && `${fmtNum(l.avg_power, 0)} W`],
+    ["Cadence", (l) => l.avg_cadence != null && fmtNum(l.avg_cadence, 0)],
+    ["Climb", (l) => l.elev_gain_m != null && `${fmtNum(l.elev_gain_m, 0)} m`],
+  ].filter(([, get]) => laps.some((l) => get(l)));
+  const types = new Set(laps.map((l) => l.intensity).filter(Boolean));
+  const showType = types.size > 1;  // only worth a column for structured workouts
+  $("#act-laps-note").textContent = `${laps.length} laps`;
+  $("#act-laps").innerHTML = `<thead><tr>${cols.map(([h], i) => `<th class="${i ? "num" : ""}">${h}</th>`).join("")}${showType ? "<th>Type</th>" : ""}</tr></thead>
+    <tbody>${laps.map((l) => `<tr>${cols.map(([, get], i) => `<td class="${i ? "num" : ""}">${escapeHtml(String(get(l) || "–"))}</td>`).join("")}${showType ? `<td>${l.intensity ? titleCase(l.intensity) : ""}</td>` : ""}</tr>`).join("")}</tbody>`;
 }
 
 async function loadDashboard() {
@@ -723,6 +871,14 @@ $("#btn-insights").addEventListener("click", generateInsights);
 $("#acts").addEventListener("click", (e) => {
   const row = e.target.closest("tr[data-id]");
   if (row) openActivity(row.dataset.id);
+});
+$("#records").addEventListener("click", (e) => {
+  const row = e.target.closest("tr[data-id]");
+  if (row) openActivity(row.dataset.id);
+});
+$("#records").addEventListener("keydown", (e) => {
+  const row = e.target.closest("tr[data-id]");
+  if (row && e.key === "Enter") openActivity(row.dataset.id);
 });
 $("#activity-dialog").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) e.currentTarget.close();

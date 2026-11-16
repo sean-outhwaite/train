@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=19">
+  <link rel="stylesheet" href="/static/styles.css?v=20">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
@@ -107,6 +107,15 @@
           <figcaption><h3>Race predictions</h3><span class="muted" id="race-note">from Garmin</span></figcaption>
           <div class="kpis" id="race-preds" data-board="到着予定  ARRIVALS"></div>
         </figure>
+        <figure class="panel chart-card full" id="bench-card" hidden>
+          <figcaption><h3>Benchmarks</h3><span class="muted">Garmin's thresholds and your personal records</span></figcaption>
+          <div class="kpis" id="bench-tiles" data-board="基準  THRESHOLDS"></div>
+          <div class="table-wrap"><table id="records" class="records"></table></div>
+        </figure>
+        <figure class="panel chart-card" id="gear-card" hidden>
+          <figcaption><h3>Gear</h3><span class="muted" id="gear-note">distance logged in Garmin</span></figcaption>
+          <ul class="gear-list" id="gear-list"></ul>
+        </figure>
         <figure class="panel chart-card">
           <figcaption><h3>Endurance score</h3><span class="muted">Garmin</span></figcaption>
           <div class="chart-box"><canvas id="c-endurance"></canvas></div>
@@ -124,12 +133,24 @@
           <div class="chart-box"><canvas id="c-hrv"></canvas></div>
         </figure>
         <figure class="panel chart-card">
-          <figcaption><h3>Sleep</h3><span class="muted">hours per night</span></figcaption>
+          <figcaption><h3>Sleep</h3><span class="muted" id="sleep-note">hours per night</span></figcaption>
           <div class="chart-box"><canvas id="c-sleep"></canvas></div>
         </figure>
         <figure class="panel chart-card">
           <figcaption><h3>Stress</h3><span class="muted">Garmin daily average, 0–100</span></figcaption>
           <div class="chart-box"><canvas id="c-stress"></canvas></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Breathing rate</h3><span class="muted">breaths per minute while asleep</span></figcaption>
+          <div class="chart-box"><canvas id="c-resp"></canvas></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Blood oxygen (<abbr class="term" data-term="SpO2" tabindex="0">SpO2</abbr>)</h3><span class="muted">% while asleep</span></figcaption>
+          <div class="chart-box"><canvas id="c-spo2"></canvas></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Intensity minutes</h3><span class="muted">per week, vigorous minutes count double</span></figcaption>
+          <div class="chart-box"><canvas id="c-intensity"></canvas></div>
         </figure>
       </div>
 
@@ -195,11 +216,15 @@
         </figure>
       </div>
       <div class="act-groups" id="act-groups"></div>
+      <figure class="panel chart-card" id="act-laps-card" hidden>
+        <figcaption><h3>Laps</h3><span class="muted" id="act-laps-note"></span></figcaption>
+        <div class="table-wrap"><table id="act-laps"></table></div>
+      </figure>
     </div>
   </dialog>
 
   <div id="tip" class="tip" role="tooltip" hidden></div>
 
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/app.js?v=18"></script>
 </body>
 </html>

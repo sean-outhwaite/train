@@ -93,6 +93,14 @@ def _daily_row(g: Garmin, day: str) -> dict:
         "body_battery_high": stats.get("bodyBatteryHighestValue"),
         "body_battery_low": stats.get("bodyBatteryLowestValue"),
         "vo2max": generic.get("vo2MaxPreciseValue") or generic.get("vo2MaxValue"),
+        "deep_sleep_s": sleep.get("deepSleepSeconds"),
+        "light_sleep_s": sleep.get("lightSleepSeconds"),
+        "rem_sleep_s": sleep.get("remSleepSeconds"),
+        "awake_sleep_s": sleep.get("awakeSleepSeconds"),
+        "respiration_avg": sleep.get("averageRespirationValue"),
+        "spo2_avg": sleep.get("averageSpO2Value"),
+        "intensity_moderate_min": stats.get("moderateIntensityMinutes"),
+        "intensity_vigorous_min": stats.get("vigorousIntensityMinutes"),
         **_training_status_fields(_safe(g.get_training_status, day)),
     }
 
@@ -182,6 +190,136 @@ def _range_rows(g: Garmin, start: date, end: date) -> tuple[dict[str, dict], dic
     return rows, readiness
 
 
+def _f_to_c(f):
+    return round((f - 32) * 5 / 9, 1) if f is not None else None
+
+
+def weather_row(source_id: str, w: dict) -> dict:
+    """Garmin's activity weather is in °F and mph. The station's position is left out."""
+    return {
+        "source_id": source_id,
+        "temp_c": _f_to_c(w.get("temp")),
+        "feels_like_c": _f_to_c(w.get("apparentTemp")),
+        "dew_point_c": _f_to_c(w.get("dewPoint")),
+        "humidity_pct": w.get("relativeHumidity"),
+        "wind_kph": round(w["windSpeed"] * 1.609, 1) if w.get("windSpeed") is not None else None,
+        "wind_dir": (w.get("windDirectionCompassPoint") or "").upper() or None,
+        "conditions": (w.get("weatherTypeDTO") or {}).get("desc"),
+    }
+
+
+def lap_rows(source_id: str, splits: dict) -> list[dict]:
+    """Garmin's laps, without their start and end positions."""
+    return [{
+        "source_id": source_id,
+        "lap_index": lap.get("lapIndex", i + 1),
+        "distance_m": lap.get("distance"),
+        "duration_s": lap.get("duration"),
+        "moving_s": lap.get("movingDuration"),
+        "avg_speed": lap.get("averageSpeed"),
+        "gap_speed": lap.get("avgGradeAdjustedSpeed"),
+        "avg_hr": lap.get("averageHR"),
+        "max_hr": lap.get("maxHR"),
+        "avg_power": lap.get("averagePower"),
+        "avg_cadence": lap.get("averageRunCadence") or lap.get("averageBikeCadence"),
+        "elev_gain_m": lap.get("elevationGain"),
+        "intensity": lap.get("intensityType"),
+    } for i, lap in enumerate(splits.get("lapDTOs") or [])]
+
+
+def fetch_activity_extras(g: Garmin, conn, source_id: str) -> None:
+    """Laps and weather for one Garmin activity. The weather row is written even when empty, so an
+    indoor activity isn't fetched again."""
+    garmin_id = source_id.removeprefix("garmin-")
+    db.replace_rows(conn, "activity_laps", lap_rows(source_id, _safe(g.get_activity_splits, garmin_id)),
+                    where=("source_id", source_id))
+    db.upsert_row(conn, "activity_weather", weather_row(source_id, _safe(g.get_activity_weather, garmin_id)))
+
+
+def activity_extras(source_id: str) -> None:
+    """Fetch laps and weather the first time an older activity is opened."""
+    conn = db.connect()
+    if conn.execute("SELECT 1 FROM activity_weather WHERE source_id = ?", (source_id,)).fetchone():
+        return
+    fetch_activity_extras(client(), conn, source_id)
+    conn.commit()
+
+
+# Garmin personal record types this app shows, as type id -> (label, sport, kind). kind says how to read the
+# value: time in seconds, distance or elevation in metres, power in watts, days, or a count. Strength records
+# are left out because their units aren't documented.
+PR_TYPES = {
+    1: ("1 km", "running", "time"), 2: ("1 mile", "running", "time"), 3: ("5K", "running", "time"),
+    4: ("10K", "running", "time"), 5: ("Half marathon", "running", "time"), 6: ("Marathon", "running", "time"),
+    7: ("Longest run", "running", "distance"), 8: ("Longest ride", "cycling", "distance"),
+    9: ("Most climbing in a ride", "cycling", "elevation"), 10: ("Best 20-min power", "cycling", "power"),
+    11: ("40 km ride", "cycling", "time"), 12: ("Most steps in a day", "steps", "count"),
+    13: ("Most steps in a week", "steps", "count"), 14: ("Most steps in a month", "steps", "count"),
+    15: ("Longest step-goal streak", "steps", "days"), 17: ("Longest pool swim", "swimming", "distance"),
+    18: ("100 m swim", "swimming", "time"), 20: ("400 m swim", "swimming", "time"),
+    22: ("750 m swim", "swimming", "time"), 23: ("1000 m swim", "swimming", "time"),
+    25: ("1500 m swim", "swimming", "time"),
+}
+
+
+def pr_rows(records: list) -> list[dict]:
+    rows = []
+    for r in records or []:
+        if (t := PR_TYPES.get(r.get("typeId"))) and r.get("value"):
+            label, sport, kind = t
+            when = r.get("activityStartDateTimeLocalFormatted") or r.get("prStartTimeGmtFormatted") or ""
+            rows.append({"type_id": r["typeId"], "label": label, "sport": sport, "kind": kind, "value": r["value"],
+                         "date": when[:10] or None,
+                         "source_id": f"garmin-{r['activityId']}" if r.get("activityId") else None})
+    return rows
+
+
+def benchmark_rows(lt: dict, ftp: dict) -> list[dict]:
+    """Lactate threshold history (Garmin gives speed in tenths of m/s) and the latest cycling FTP."""
+    rows = []
+    for series, metric, scale in (("heart_rate", "lt_hr", 1), ("speed", "lt_speed", 10), ("power", "lt_power", 1)):
+        for p in (lt or {}).get(series) or []:
+            if p.get("from") and p.get("value"):
+                rows.append({"date": p["from"][:10], "metric": metric, "value": round(p["value"] * scale, 3)})
+    if (ftp or {}).get("functionalThresholdPower") and ftp.get("calendarDate"):
+        rows.append({"date": ftp["calendarDate"][:10], "metric": "ftp", "value": ftp["functionalThresholdPower"]})
+    return rows
+
+
+def sync_benchmarks(g: Garmin, conn) -> None:
+    """A few calls each sync: they cover the full history, so there's nothing to backfill."""
+    today = date.today()
+    lt = _safe(lambda: g.get_lactate_threshold(latest=False, start_date=(today - timedelta(days=365)).isoformat(),
+                                               end_date=today.isoformat()))
+    for row in benchmark_rows(lt, _safe(g.get_cycling_ftp)):
+        db.upsert_row(conn, "benchmarks", row)
+    records = _safe(g.get_personal_record)
+    if records:
+        db.replace_rows(conn, "personal_records", pr_rows(records))
+
+
+def gear_row(item: dict, stats: dict) -> dict:
+    return {
+        "uuid": item["uuid"],
+        "name": item.get("displayName") or item.get("customMakeModel")
+        or " ".join(filter(None, (item.get("gearMakeName"), item.get("gearModelName")))) or None,
+        "type": item.get("gearTypeName"),
+        "status": item.get("gearStatusName"),
+        "date_begin": (item.get("dateBegin") or "")[:10] or None,
+        "date_end": (item.get("dateEnd") or "")[:10] or None,
+        "max_m": item.get("maximumMeters") or None,
+        "distance_m": stats.get("totalDistance"),
+        "activities": stats.get("totalActivities"),
+    }
+
+
+def sync_gear(g: Garmin, conn) -> None:
+    """One call for the list and one per item for its distance."""
+    items = _safe(g.get_gear, g.profile_id)
+    if isinstance(items, list):
+        db.replace_rows(conn, "gear", [gear_row(i, _safe(g.get_gear_stats, i["uuid"])) for i in items if i.get("uuid")])
+
+
 def track(source_id: str) -> list[list[float]]:
     """An activity's GPS route as [lat, lon] pairs, fetched from Garmin the first time it's viewed.
 
@@ -215,6 +353,17 @@ def sync(days: int | None = None, interactive: bool = False, log=print) -> dict:
         db.upsert_activity(conn, _activity_row(a))
     conn.commit()
     log(f"activities: {len(acts)}")
+    fetched = {r[0] for r in conn.execute("SELECT source_id FROM activity_weather")}
+    for a in acts:
+        if (sid := f"garmin-{a['activityId']}") not in fetched:
+            fetch_activity_extras(g, conn, sid)
+    conn.commit()
+    log("activity laps and weather: done")
+    sync_benchmarks(g, conn)
+    conn.commit()
+    sync_gear(g, conn)
+    conn.commit()
+    log("benchmarks, records and gear: done")
 
     # Range endpoints cover months in a few calls, so the first sync that has them backfills the full history.
     backfilled = db.get_meta(conn, "garmin_readiness_backfilled")

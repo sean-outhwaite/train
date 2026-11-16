@@ -56,9 +56,11 @@ def test_uds_row():
                                             {"type": "TOTAL", "averageStressLevel": 30}]},
         "bodyBattery": {"bodyBatteryStatList": [{"bodyBatteryStatType": "HIGHEST", "statsValue": 90},
                                                 {"bodyBatteryStatType": "LOWEST", "statsValue": 20}]},
+        "moderateIntensityMinutes": 20, "vigorousIntensityMinutes": 15,
     })
     assert row == {"date": "2024-03-10", "steps": 8000, "resting_hr": 52, "stress_avg": 30,
-                   "body_battery_high": 90, "body_battery_low": 20}
+                   "body_battery_high": 90, "body_battery_low": 20,
+                   "intensity_moderate_min": 20, "intensity_vigorous_min": 15}
 
 
 def test_uds_negative_stress_means_not_recorded():
@@ -69,8 +71,11 @@ def test_uds_negative_stress_means_not_recorded():
 
 def test_sleep_row():
     row = gi._sleep_row({"calendarDate": "2024-03-10", "deepSleepSeconds": 3600, "lightSleepSeconds": 14_400,
-                         "remSleepSeconds": 7200, "awakeSleepSeconds": 900, "sleepScores": {"overallScore": 80}})
-    assert row == {"date": "2024-03-10", "sleep_s": 25_200, "sleep_score": 80}
+                         "remSleepSeconds": 7200, "awakeSleepSeconds": 900, "sleepScores": {"overallScore": 80},
+                         "averageRespiration": 14.5, "spo2SleepSummary": {"averageSPO2": 95}})
+    assert row == {"date": "2024-03-10", "sleep_s": 25_200, "sleep_score": 80, "deep_sleep_s": 3600,
+                   "light_sleep_s": 14_400, "rem_sleep_s": 7200, "awake_sleep_s": 900,
+                   "respiration_avg": 14.5, "spo2_avg": 95}
     assert gi._sleep_row({"calendarDate": "2024-03-10"})["sleep_s"] is None
 
 

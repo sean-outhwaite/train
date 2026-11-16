@@ -43,12 +43,24 @@ def query_data(sql: str) -> str:
             stress_avg 0-100, body_battery_high, body_battery_low, vo2max,
             training_readiness 0-100 [Garmin morning score], training_status [Garmin phrase, e.g. PRODUCTIVE],
             acute_load, chronic_load [Garmin's own 7-day/28-day load, not TRIMP], endurance_score, hill_score,
-            race_5k_s, race_10k_s, race_half_s, race_marathon_s [Garmin race predictions, seconds])
+            race_5k_s, race_10k_s, race_half_s, race_marathon_s [Garmin race predictions, seconds],
+            deep_sleep_s, light_sleep_s, rem_sleep_s, awake_sleep_s, respiration_avg [breaths/min asleep],
+            spo2_avg [% asleep], intensity_moderate_min, intensity_vigorous_min)
       readiness(date, level [POOR|LOW|MODERATE|HIGH|PRIME], feedback, recovery_time_h, and per factor a
                 <factor>_pct 0-100 (100 best) and <factor>_feedback [POOR|MODERATE|GOOD|VERY_GOOD] for
                 sleep, recovery, load [acute load], hrv, stress [stress history], sleep_history;
                 NULL = Garmin had no data for that factor). The score is daily.training_readiness.
-    Use substr(start_time,1,10) to join activities to daily.date.
+      activity_laps(source_id, lap_index, distance_m, duration_s, moving_s, avg_speed m/s, gap_speed m/s,
+                    avg_hr, max_hr, avg_power, avg_cadence, elev_gain_m, intensity [ACTIVE|REST|WARMUP|...])
+      activity_weather(source_id, temp_c, feels_like_c, dew_point_c, humidity_pct, wind_kph, wind_dir,
+                       conditions) [only for activities fetched so far; all NULL = no weather, e.g. indoor]
+      benchmarks(date, metric [lt_hr bpm | lt_speed m/s | lt_power W running | ftp W cycling], value)
+                 [Garmin's lactate threshold and FTP; a row is the date a new value was detected]
+      personal_records(type_id, label, sport, kind [time s|distance m|elevation m|power W|days|count], value,
+                       date, source_id)
+      gear(uuid, name, type, status [active|retired], date_begin, date_end, max_m [retirement distance],
+           distance_m, activities)
+    Use substr(start_time,1,10) to join activities to daily.date, and source_id for the activity tables.
     """
     stmt = validate_select(sql)
     conn = db.connect_readonly()
@@ -67,7 +79,8 @@ def get_metric_series(metric: str, days: int = 90) -> str:
     """Daily values of one derived metric for the last `days` days (7-365), as JSON.
 
     Metrics: resting_hr, hrv_avg, sleep_h, sleep_score, stress_avg, steps, body_battery_high,
-    body_battery_low, vo2max, training_readiness, acute_load, chronic_load (Garmin's own load),
+    body_battery_low, vo2max, sleep_deep_h, sleep_light_h, sleep_rem_h, sleep_awake_h, respiration_avg,
+    spo2_avg, intensity_min (moderate + 2 x vigorous), training_readiness, acute_load, chronic_load (Garmin's own load),
     endurance_score, hill_score, race_5k_min, race_10k_min, race_half_min, race_marathon_min
     (Garmin race predictions), load (daily TRIMP), distance_km, duration_min,
     ctl (42-day fitness), atl (7-day fatigue), tsb (form = ctl - atl).

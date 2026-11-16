@@ -78,6 +78,8 @@ def dashboard(days: int = 90):
         "empty": False,
         "kpis": metrics.kpis(conn),
         "readiness": metrics.readiness_latest(conn),
+        "benchmarks": metrics.benchmarks(conn),
+        "gear": metrics.gear(conn),
         "weekly": metrics.weekly_volume(conn, 16),
         "daily": frame,
         "activities": acts,
@@ -91,6 +93,20 @@ def activity(source_id: str):
     if detail is None:
         raise HTTPException(404, "Activity not found")
     return detail
+
+
+@app.get("/api/activities/{source_id}/extras")
+async def activity_extras_route(source_id: str):
+    """Laps and weather. Older Garmin activities fetch them from Garmin the first time."""
+    conn = db.connect()
+    if metrics.activity_detail(conn, source_id) is None:
+        raise HTTPException(404, "Activity not found")
+    if source_id.startswith("garmin-"):
+        try:
+            await run_in_threadpool(garmin_sync.activity_extras, source_id)
+        except Exception:
+            pass  # offline or not logged in: show what's stored
+    return metrics.activity_extras(db.connect(), source_id)
 
 
 @app.get("/api/activities/{source_id}/track")

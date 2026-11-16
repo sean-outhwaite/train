@@ -204,3 +204,39 @@ def test_activity_detail_keeps_owner_fields_out(conn):
     assert a["fastest"] == [{"label": "1 km", "seconds": 240.5}]
     assert a["has_route"] is True
     assert metrics.activity_detail(conn, "missing") is None
+
+
+
+def test_intensity_minutes_count_vigorous_double(conn):
+    db.upsert_daily(conn, {"date": "2024-03-09", "intensity_moderate_min": 20, "intensity_vigorous_min": 10})
+    db.upsert_daily(conn, {"date": "2024-03-10", "steps": 100})
+    conn.commit()
+    frame = metrics.daily_frame(conn, 2)
+    assert [r["intensity_min"] for r in frame] == [40, None]
+
+
+def test_gear_warns_near_retirement(conn):
+    db.replace_rows(conn, "gear", [
+        {"uuid": "a", "name": "Worn", "status": "active", "max_m": 500_000, "distance_m": 460_000},
+        {"uuid": "b", "name": "New", "status": "active", "max_m": 500_000, "distance_m": 100_000},
+        {"uuid": "c", "name": "No limit", "status": "active", "distance_m": 900_000},
+        {"uuid": "d", "name": "Old", "status": "retired", "distance_m": 800_000},
+    ])
+    g = metrics.gear(conn)
+    assert [(i["name"], i["warn"]) for i in g["active"]] == [("No limit", False), ("Worn", True), ("New", False)]
+    assert g["active"][1]["worn"] == 0.92 and g["retired"] == 1
+
+
+def test_activity_extras_hide_a_single_lap(conn):
+    db.replace_rows(conn, "activity_laps", [{"source_id": "a1", "lap_index": 1, "distance_m": 5000}])
+    db.upsert_row(conn, "activity_weather", {"source_id": "a1"})
+    assert metrics.activity_extras(conn, "a1") == {"laps": [], "weather": None}
+
+
+def test_benchmarks_compare_with_a_year_ago(conn):
+    from datetime import date, timedelta
+    old, mid, new = (date.today() - timedelta(days=n) for n in (500, 200, 10))
+    for d, v in ((old, 160), (mid, 170), (new, 174)):
+        db.upsert_row(conn, "benchmarks", {"date": d.isoformat(), "metric": "lt_hr", "value": v})
+    (t,) = metrics.benchmarks(conn)["thresholds"]
+    assert (t["first"], t["first_date"], t["latest"]) == (170, mid.isoformat(), 174)
