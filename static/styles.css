@@ -222,6 +222,7 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   .spinner { animation: none; }
   .skeleton-card i { animation: none; }
   .drawer, body { transition: none; }
+  .route-fill, .route-train, .route-train svg, .tab .stop { transition: none !important; }
 }
 
 .term { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
@@ -361,16 +362,37 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 #race-preds .kpi + .kpi { border-left: 0; }
 #race-preds .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
 
-/* Tabs are platform signs: the current one is lit in the sign colour with the livery stripe under it. */
-.tabs { display: flex; gap: 6px; margin: 0 0 18px; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none;
-  border-bottom: 2px solid var(--border); }
-.tab { display: inline-flex; flex-direction: column; gap: 1px; padding: 6px 16px 8px; border-radius: 6px 6px 0 0;
-  color: var(--text-secondary); text-decoration: none; font-weight: 500; white-space: nowrap; margin-bottom: -4px;
-  border-bottom: 4px solid transparent; }
-.tab::before { content: attr(data-jp); font-size: 10px; letter-spacing: .12em; opacity: .75; }
-.tab:hover { background: var(--surface-2); color: var(--text-primary); }
-.tab[aria-selected="true"] { background: var(--sign); color: var(--sign-ink); border-bottom-color: var(--stripe-2); }
-.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Tabs are stops on one line, like a route map. One line runs between the end stops, its pink part
+   grows to the current stop, and a small train rides along it. app.js sets the positions in pixels. */
+.tabs { --stop-h: 26px; --line: 4px; --train-h: 12px; --ms: 0ms; --ease: ease; /* both set by app.js */
+  position: relative; display: flex; margin: 0 0 20px; padding: calc(var(--train-h) + 8px) 0 2px; overflow-x: auto;
+  scrollbar-width: none; }
+.tab { position: relative; flex: 1 0 96px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 0 6px 6px; color: var(--text-secondary); text-decoration: none; font-weight: 500; white-space: nowrap; }
+.route { position: absolute; z-index: 0; height: var(--line); border-radius: 2px; background: var(--border);
+  top: calc(var(--train-h) + 8px + var(--stop-h) / 2 - var(--line) / 2); }
+.route-fill { position: absolute; inset: 0 auto 0 0; width: var(--fill, 0px); border-radius: inherit;
+  background: var(--stripe-2); transition: width var(--ms) var(--ease); }
+.route-train { position: absolute; left: 0; bottom: calc(var(--stop-h) / 2 + 3px); height: var(--train-h);
+  transform: translateX(calc(var(--fill, 0px) - 50%)); transition: transform var(--ms) var(--ease); }
+.route-train svg { display: block; height: 100%; width: auto; overflow: visible; transition: transform .2s ease; }
+.route.reverse .route-train svg { transform: scaleX(-1); }
+.route-train .car { fill: var(--text-primary); }
+.route-train .glass { fill: var(--page); }
+.tab .stop { position: relative; z-index: 1; display: inline-grid; place-items: center; min-width: 40px;
+  height: var(--stop-h); padding: 0 6px; border: 2px solid var(--border); border-radius: 6px; background: var(--page);
+  font: 400 13px/1 var(--dot); color: var(--text-secondary);
+  transition: background .2s ease, border-color .2s ease, color .2s ease; }
+.tab.past .stop { border-color: var(--stripe-2); color: var(--text-primary); }
+.tab[aria-selected="true"] .stop { background: var(--sign); border-color: var(--sign); color: var(--sign-ink); }
+.tab .name { font-size: 13.5px; }
+.tab .jp { font-size: 10px; letter-spacing: .12em; color: var(--text-muted); margin-top: -3px; }
+.tab[aria-selected="true"] .name { color: var(--text-primary); font-weight: 700; }
+.tab:hover .stop { border-color: var(--text-muted); }
+.tab.past:hover .stop { border-color: var(--stripe-2); }
+.tab:hover .name { color: var(--text-primary); }
+.tab:focus-visible { outline: none; }
+.tab:focus-visible .stop { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; font-weight: 500;
@@ -398,3 +420,11 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .record-card .btn.link { align-self: flex-start; margin-top: 6px; font-size: 13px; text-align: left; }
 .badge-new { font: 400 11px/1 var(--dot); letter-spacing: .08em; padding: 3px 7px 4px; border-radius: 4px;
   background: var(--sign-accent); color: var(--sign-accent-ink); }
+/* On phones the whole route fits on screen: smaller stops, no Japanese line. */
+@media (max-width: 560px) {
+  .tabs { --stop-h: 22px; --train-h: 10px; overflow: visible; }
+  .tab { flex: 1 1 0; min-width: 0; padding: 0 0 4px; }
+  .tab .stop { min-width: 34px; padding: 0 3px; font-size: 11.5px; }
+  .tab .name { font-size: 11.5px; }
+  .tab .jp { display: none; }
+}
