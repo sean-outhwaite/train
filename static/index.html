@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DotGothic16&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=15">
+  <link rel="stylesheet" href="/static/styles.css?v=19">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
@@ -93,6 +93,27 @@
         <figure class="panel chart-card wide">
           <figcaption><h3>Fitness, fatigue &amp; form</h3><span class="muted"><abbr class="term" data-term="CTL" tabindex="0">CTL</abbr> · <abbr class="term" data-term="ATL" tabindex="0">ATL</abbr> · <abbr class="term" data-term="TSB" tabindex="0">TSB</abbr>, computed from heart rate (<abbr class="term" data-term="TRIMP" tabindex="0">TRIMP</abbr>)</span></figcaption>
           <div class="chart-box"><canvas id="c-load"></canvas></div>
+        </figure>
+        <figure class="panel chart-card full" id="readiness-card">
+          <figcaption><h3>Training readiness</h3><span class="muted" id="readiness-note">Garmin morning score, 0–100</span></figcaption>
+          <div class="readiness-now" id="readiness-now"></div>
+          <div class="chart-box"><canvas id="c-readiness"></canvas></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Garmin training load</h3><span class="muted">acute (7-day) and chronic (28-day), Garmin's scale</span></figcaption>
+          <div class="chart-box"><canvas id="c-garmin-load"></canvas></div>
+        </figure>
+        <figure class="panel chart-card" id="race-card">
+          <figcaption><h3>Race predictions</h3><span class="muted" id="race-note">from Garmin</span></figcaption>
+          <div class="kpis" id="race-preds" data-board="到着予定  ARRIVALS"></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Endurance score</h3><span class="muted">Garmin</span></figcaption>
+          <div class="chart-box"><canvas id="c-endurance"></canvas></div>
+        </figure>
+        <figure class="panel chart-card">
+          <figcaption><h3>Hill score</h3><span class="muted">Garmin</span></figcaption>
+          <div class="chart-box"><canvas id="c-hill"></canvas></div>
         </figure>
         <figure class="panel chart-card">
           <figcaption><h3>Resting heart rate</h3><span class="muted">bpm, daily and 7-day average</span></figcaption>
@@ -179,6 +200,6 @@
 
   <div id="tip" class="tip" role="tooltip" hidden></div>
 
-  <script src="/static/app.js?v=14"></script>
+  <script src="/static/app.js?v=16"></script>
 </body>
 </html>

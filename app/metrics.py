@@ -48,6 +48,15 @@ METRICS: dict[str, dict] = {
     "body_battery_high": {"label": "Body Battery high", "unit": ""},
     "body_battery_low":  {"label": "Body Battery low", "unit": ""},
     "vo2max":            {"label": "VO2 max", "unit": "ml/kg/min"},
+    "training_readiness": {"label": "Training readiness", "unit": ""},
+    "acute_load":        {"label": "Garmin acute load", "unit": "Garmin load"},
+    "chronic_load":      {"label": "Garmin chronic load", "unit": "Garmin load"},
+    "endurance_score":   {"label": "Endurance score", "unit": ""},
+    "hill_score":        {"label": "Hill score", "unit": ""},
+    "race_5k_min":       {"label": "5K prediction", "unit": "min"},
+    "race_10k_min":      {"label": "10K prediction", "unit": "min"},
+    "race_half_min":     {"label": "Half marathon prediction", "unit": "min"},
+    "race_marathon_min": {"label": "Marathon prediction", "unit": "min"},
     "load":              {"label": "Training load", "unit": "TRIMP"},
     "distance_km":       {"label": "Distance", "unit": "km"},
     "duration_min":      {"label": "Training time", "unit": "min"},
@@ -57,9 +66,14 @@ METRICS: dict[str, dict] = {
 }
 
 
-# Measured by the watch, so these only exist for times it was worn. The rest are derived from activities.
+# From the watch or Garmin, so these only exist for times it was worn or Garmin scored. The rest are
+# derived from activities.
 WELLNESS_METRICS = ["resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg", "steps",
-                    "body_battery_high", "body_battery_low", "vo2max"]
+                    "body_battery_high", "body_battery_low", "vo2max", "training_readiness",
+                    "acute_load", "chronic_load", "endurance_score", "hill_score",
+                    "race_5k_min", "race_10k_min", "race_half_min", "race_marathon_min"]
+RACES = {"race_5k_min": "race_5k_s", "race_10k_min": "race_10k_s",
+         "race_half_min": "race_half_s", "race_marathon_min": "race_marathon_s"}
 
 
 def _activity_load(a: sqlite3.Row, rest_hr: float, max_hr: float) -> float:
@@ -121,6 +135,13 @@ def daily_frame(conn: sqlite3.Connection, days: int = 180, end: date | None = No
             "body_battery_high": w.get("body_battery_high"),
             "body_battery_low": w.get("body_battery_low"),
             "vo2max": w.get("vo2max"),
+            "training_readiness": w.get("training_readiness"),
+            "training_status": w.get("training_status"),
+            "acute_load": w.get("acute_load"),
+            "chronic_load": w.get("chronic_load"),
+            "endurance_score": w.get("endurance_score"),
+            "hill_score": w.get("hill_score"),
+            **{k: round(w[col] / 60, 2) if w.get(col) else None for k, col in RACES.items()},
             "load": round(t["load"], 1),
             "distance_km": round(t["distance_km"], 2),
             "duration_min": round(t["duration_min"], 1),
@@ -180,6 +201,25 @@ def activity_detail(conn: sqlite3.Connection, source_id: str) -> dict | None:
     return a
 
 
+# Garmin's readiness factors, in the order Garmin lists them.
+READINESS_FACTORS = {"sleep": "Sleep score", "recovery": "Recovery time", "load": "Acute load",
+                     "hrv": "HRV status", "stress": "Stress history", "sleep_history": "Sleep history"}
+
+
+def readiness_latest(conn: sqlite3.Connection) -> dict | None:
+    """The most recent morning readiness score and what made it up. Factors with no data are left out."""
+    r = conn.execute(
+        "SELECT r.*, d.training_readiness score FROM readiness r JOIN daily d USING (date) "
+        "WHERE d.training_readiness IS NOT NULL ORDER BY date DESC LIMIT 1"
+    ).fetchone()
+    if r is None:
+        return None
+    factors = [{"key": k, "label": label, "percent": r[f"{k}_pct"], "feedback": r[f"{k}_feedback"]}
+               for k, label in READINESS_FACTORS.items() if r[f"{k}_feedback"]]
+    return _present({"date": r["date"], "score": r["score"], "level": r["level"], "feedback": r["feedback"],
+                     "recovery_time_h": r["recovery_time_h"], "factors": factors})
+
+
 def weekly_volume(conn: sqlite3.Connection, weeks: int = 16) -> dict:
     """Training hours per ISO week (Monday start), split by sport."""
     end = _last_data_day(conn)
@@ -204,6 +244,10 @@ def _mean(vals: list) -> float | None:
     return round(statistics.fmean(vals), 1) if vals else None
 
 
+def _latest(rows: list, key: str):
+    return next((r[key] for r in reversed(rows) if r[key] is not None), None)
+
+
 def kpis(conn: sqlite3.Connection) -> list[dict]:
     frame = daily_frame(conn, 14)
     prev, cur = frame[:7], frame[7:]
@@ -214,6 +258,7 @@ def kpis(conn: sqlite3.Connection) -> list[dict]:
         ("hrv_avg", "Overnight HRV", "ms", lambda rows: _mean([r["hrv_avg"] for r in rows]), "higher"),
         ("sleep_h", "Sleep", "h/night", lambda rows: _mean([r["sleep_h"] for r in rows]), "higher"),
         ("tsb", "Form (TSB)", "", lambda rows: rows[-1]["tsb"] if rows else None, "neutral"),
+        ("training_readiness", "Training readiness", "/100", lambda rows: _latest(rows, "training_readiness"), "higher"),
     ]
     tiles = [
         {"key": k, "label": label, "unit": unit, "current": fn(cur), "previous": fn(prev), "better": better}
@@ -246,11 +291,13 @@ def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
             "sleep_h": _mean([r["sleep_h"] for r in chunk]),
             "sleep_score": _mean([r["sleep_score"] for r in chunk]),
             "stress": _mean([r["stress_avg"] for r in chunk]),
+            "readiness": _mean([r["training_readiness"] for r in chunk]),
             "ctl_end": chunk[-1]["ctl"],
             "tsb_end": chunk[-1]["tsb"],
         }))
     recent = [
-        _present({k: r[k] for k in ("date", "load", "resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg", "tsb")})
+        _present({k: r[k] for k in ("date", "load", "resting_hr", "hrv_avg", "sleep_h", "sleep_score", "stress_avg",
+                                    "tsb", "training_readiness", "training_status", "acute_load", "chronic_load")})
         for r in frame[-14:]
     ]
     acts = [
@@ -261,7 +308,11 @@ def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
             "FROM activities ORDER BY start_time DESC LIMIT 30"
         )
     ]
-    vo2 = [r["vo2max"] for r in frame if r["vo2max"]]
+
+    def first_latest(key: str) -> dict | None:
+        vals = [r[key] for r in frame if r[key] is not None]
+        return {"first": vals[0], "latest": vals[-1]} if vals else None
+
     return {
         "period": {"start": frame[0]["date"], "end": frame[-1]["date"]},
         "data_coverage": {
@@ -272,7 +323,8 @@ def summary_for_claude(conn: sqlite3.Connection, days: int = 90) -> dict:
         "weekly": weekly,
         "last_14_days": recent,
         "recent_activities": acts,
-        "vo2max": {"first": vo2[0], "latest": vo2[-1]} if vo2 else None,
+        **{k: v for k in ("vo2max", "endurance_score", "hill_score", *RACES) if (v := first_latest(k))},
+        **({"readiness_latest": r} if (r := readiness_latest(conn)) else {}),
     }
 
 

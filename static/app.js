@@ -172,6 +172,111 @@ function renderCharts(d) {
   drawIfData("c-hrv", "hrv_avg", () => dailyPlusAvg("hrv_avg", "HRV", "ms"));
   drawIfData("c-sleep", "sleep_h", () => ({ data: { labels, datasets: [bar("Sleep", col("sleep_h"), css("--series-1"), { maxBarThickness: 8 })] }, options: singleSeries({ unit: "h" }) }));
   drawIfData("c-stress", "stress_avg", () => ({ data: { labels, datasets: [line("Stress", col("stress_avg"), css("--series-1"))] }, options: singleSeries() }));
+
+  drawReadiness(d, labels, col("training_readiness"));
+  drawIfData("c-garmin-load", "acute_load", () => ({ data: { labels, datasets: [
+    line("Acute (7-day)", col("acute_load"), css("--series-2")),
+    line("Chronic (28-day)", col("chronic_load"), css("--series-1")),
+  ] }, options: baseOptions() }));
+  drawIfData("c-endurance", "endurance_score", () => ({ data: { labels, datasets: [line("Endurance score", col("endurance_score"), css("--series-1"))] }, options: singleSeries() }));
+  drawIfData("c-hill", "hill_score", () => ({ data: { labels, datasets: [line("Hill score", col("hill_score"), css("--series-1"))] }, options: singleSeries() }));
+  renderRacePredictions(d.daily);
+}
+
+// Garmin's readiness levels, as background bands on the trend. Colour carries the level everywhere.
+const READINESS_BANDS = [
+  { from: 0, to: 25, label: "Poor", color: "--critical" },
+  { from: 25, to: 50, label: "Low", color: "--serious" },
+  { from: 50, to: 75, label: "Moderate", color: "--warning" },
+  { from: 75, to: 100, label: "High", color: "--good" },
+];
+const LEVEL_COLOR = { POOR: "--critical", LOW: "--serious", MODERATE: "--warning", HIGH: "--good", PRIME: "--good" };
+const FEEDBACK_COLOR = { POOR: "--serious", MODERATE: "--warning", GOOD: "--good", VERY_GOOD: "--good" };
+
+const bandsPlugin = {
+  id: "bands",
+  beforeDatasetsDraw(chart) {
+    const { ctx, chartArea: area, scales: { y } } = chart;
+    ctx.save();
+    ctx.font = `500 10.5px ${css("--font")}`;
+    ctx.textAlign = "right";
+    for (const b of READINESS_BANDS) {
+      const top = y.getPixelForValue(b.to), bottom = y.getPixelForValue(b.from);
+      ctx.fillStyle = withAlpha(css(b.color), 0.1);
+      ctx.fillRect(area.left, top, area.right - area.left, bottom - top);
+      ctx.fillStyle = withAlpha(css(b.color), 0.9);
+      ctx.fillText(b.label, area.right - 6, top + 13);
+    }
+    ctx.restore();
+  },
+};
+
+function drawReadiness(d, labels, values) {
+  const card = $("#readiness-card");
+  const canvas = $("#c-readiness");
+  card.hidden = !values.some((v) => v != null);
+  if (card.hidden) { charts.get(canvas)?.destroy(); charts.delete(canvas); return; }
+
+  const status = [...d.daily].reverse().find((r) => r.training_status)?.training_status;
+  $("#readiness-note").textContent = "Garmin morning score, 0–100" + (status ? ` · training status: ${titleCase(status)}` : "");
+  renderReadinessNow(d.readiness);
+
+  const options = baseOptions();
+  options.scales.y.min = 0;
+  options.scales.y.max = 100;
+  options.scales.y.grid.display = false;
+  draw(canvas, {
+    data: { labels, datasets: [
+      line("7-day average", rolling(values), css("--text-primary")),
+      line("Daily", values, withAlpha(css("--text-secondary"), 0.5), { borderWidth: 1, tension: 0, pointRadius: 2, pointBackgroundColor: withAlpha(css("--text-secondary"), 0.7) }),
+    ] },
+    options,
+    plugins: [bandsPlugin],
+  });
+}
+
+// This morning's score, and the factors behind it with the weakest one marked.
+function renderReadinessNow(r) {
+  const box = $("#readiness-now");
+  if (!r) { box.innerHTML = ""; return; }
+  const level = LEVEL_COLOR[r.level] || "--text-primary";
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const when = r.date === today ? "This morning" : `Morning of ${fmtDate(r.date)}`;
+  const factors = r.factors || [];
+  const weakest = factors.length ? factors.reduce((a, b) => (b.percent < a.percent ? b : a)) : null;
+  box.innerHTML = `
+    <div class="readiness-score" style="--level: var(${level})">
+      <span class="muted">${when}</span>
+      <span class="big">${fmtNum(r.score, 0)}<small>/100</small></span>
+      <span class="level">${r.level ? titleCase(r.level) : ""}${r.feedback ? ` · ${escapeHtml(titleCase(r.feedback))}` : ""}</span>
+      ${weakest && !["GOOD", "VERY_GOOD"].includes(weakest.feedback) ? `<span class="muted">Held back most by ${weakest.label.toLowerCase()}</span>` : ""}
+      ${r.recovery_time_h ? `<span class="muted">Recovery time left: ${fmtNum(r.recovery_time_h, 0)} h</span>` : ""}
+    </div>
+    <ul class="factors" aria-label="What made up the score">${factors.map((f) => `
+      <li class="factor${f === weakest && factors.length > 1 ? " weakest" : ""}" style="--level: var(${FEEDBACK_COLOR[f.feedback] || "--text-muted"})">
+        <span class="name">${f.label}</span>
+        <span class="track"><span class="fill" style="width: ${Math.max(2, f.percent || 0)}%"></span></span>
+        <span class="word">${titleCase(f.feedback)}</span>
+      </li>`).join("")}
+    </ul>`;
+}
+
+// Latest Garmin prediction per distance, against the first one in the period. Lower is faster.
+function renderRacePredictions(daily) {
+  const races = [["race_5k_min", "5K"], ["race_10k_min", "10K"], ["race_half_min", "Half marathon"], ["race_marathon_min", "Marathon"]];
+  const tiles = races.map(([key, label]) => {
+    const rows = daily.filter((r) => r[key] != null);
+    if (!rows.length) return "";
+    const first = rows[0], last = rows.at(-1);
+    const change = (last[key] - first[key]) * 60;
+    const delta = Math.abs(change) < 1 ? `■ no change since ${fmtDate(first.date)}`
+      : `${change < 0 ? "▼" : "▲"} ${fmtDuration(Math.abs(change))} ${change < 0 ? "faster" : "slower"} since ${fmtDate(first.date)}`;
+    return `<div class="kpi"><div class="label">${label}</div><div class="value">${fmtDuration(last[key] * 60)}</div>
+      <div class="delta">${rows.length > 1 ? delta : "first prediction"}</div></div>`;
+  }).join("");
+  $("#race-card").hidden = !tiles;
+  $("#race-preds").innerHTML = tiles;
 }
 
 // Claude-authored chart specs: one panel per unit, sharing the time axis (never dual-axis).

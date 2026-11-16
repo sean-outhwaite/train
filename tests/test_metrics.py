@@ -154,7 +154,41 @@ def test_kpis_hide_tiles_without_data(conn):
     conn.commit()
     keys = {t["key"] for t in metrics.kpis(conn)}
     assert {"duration_min", "distance_km", "tsb"} <= keys
-    assert not keys & {"resting_hr", "hrv_avg", "sleep_h"}
+    assert not keys & {"resting_hr", "hrv_avg", "sleep_h", "training_readiness"}
+
+
+def test_readiness_kpi_is_latest_score(conn):
+    for day, score in (("2024-03-02", 50), ("2024-03-08", 62), ("2024-03-09", 80)):
+        db.upsert_daily(conn, {"date": day, "training_readiness": score})
+    db.upsert_daily(conn, {"date": "2024-03-10", "steps": 5000})  # no readiness on the last day
+    conn.commit()
+    tile = next(t for t in metrics.kpis(conn) if t["key"] == "training_readiness")
+    assert (tile["current"], tile["previous"]) == (80, 50)
+
+
+def test_readiness_latest_skips_days_without_a_score(conn):
+    db.upsert_daily(conn, {"date": "2024-03-09", "training_readiness": 64})
+    db.upsert_readiness(conn, {"date": "2024-03-09", "level": "MODERATE", "sleep_pct": 70, "sleep_feedback": "GOOD",
+                               "recovery_pct": 20, "recovery_feedback": "POOR"})
+    db.upsert_readiness(conn, {"date": "2024-03-10", "level": "HIGH"})  # no score in daily
+    conn.commit()
+    r = metrics.readiness_latest(conn)
+    assert (r["date"], r["score"], r["level"]) == ("2024-03-09", 64, "MODERATE")
+    assert [(f["key"], f["percent"], f["feedback"]) for f in r["factors"]] == [("sleep", 70, "GOOD"), ("recovery", 20, "POOR")]
+    assert "recovery_time_h" not in r
+    assert metrics.summary_for_claude(conn, 10)["readiness_latest"] == r
+
+
+def test_race_predictions_become_minutes_and_reach_claude(conn):
+    db.upsert_daily(conn, {"date": "2024-03-01", "race_5k_s": 1320, "training_status": "PRODUCTIVE"})
+    db.upsert_daily(conn, {"date": "2024-03-10", "race_5k_s": 1290})
+    conn.commit()
+    frame = metrics.daily_frame(conn, 10)
+    assert [r["race_5k_min"] for r in frame if r["race_5k_min"]] == [22.0, 21.5]
+    summary = metrics.summary_for_claude(conn, 10)
+    assert summary["race_5k_min"] == {"first": 22.0, "latest": 21.5}
+    assert "race_marathon_min" not in summary
+    assert "race_marathon_min" in summary["data_coverage"]["not_recorded"]
 
 
 def test_activity_detail_keeps_owner_fields_out(conn):

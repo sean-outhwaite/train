@@ -40,7 +40,10 @@ python -m app.seed                 # demo data, to try the UI (remove with: pyth
 - **Live Garmin sync (unofficial `garminconnect` library, a grey area under Garmin's terms):** copy
   `.env.example` to `.env`, fill in `GARMIN_EMAIL`/`GARMIN_PASSWORD`, and run
   `python -m app.garmin_sync --login` once in a terminal (this handles MFA). After that the **Sync Garmin**
-  button works.
+  button works. Besides wellness and activities, sync pulls Garmin's training readiness, training status,
+  acute/chronic load, race predictions, and endurance and hill scores where your watch has them. Readiness and
+  race predictions backfill 180 days on their first sync. Training status and load are fetched one day at a
+  time, so run `python -m app.garmin_sync --days 180` once if you want their history too.
 
 ## Run
 

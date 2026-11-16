@@ -77,6 +77,7 @@ def dashboard(days: int = 90):
     return {
         "empty": False,
         "kpis": metrics.kpis(conn),
+        "readiness": metrics.readiness_latest(conn),
         "weekly": metrics.weekly_volume(conn, 16),
         "daily": frame,
         "activities": acts,

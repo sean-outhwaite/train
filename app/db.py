@@ -36,7 +36,32 @@ CREATE TABLE IF NOT EXISTS daily (
     stress_avg        REAL,
     body_battery_high REAL,
     body_battery_low  REAL,
-    vo2max            REAL
+    vo2max            REAL,
+    training_readiness REAL,                -- Garmin training readiness, 0-100 (morning score)
+    training_status   TEXT,                 -- Garmin training status phrase, e.g. PRODUCTIVE
+    acute_load        REAL,                 -- Garmin 7-day acute training load
+    chronic_load      REAL,                 -- Garmin 28-day chronic training load
+    endurance_score   REAL,
+    hill_score        REAL,
+    race_5k_s         REAL,                 -- Garmin race predictions, seconds
+    race_10k_s        REAL,
+    race_half_s       REAL,
+    race_marathon_s   REAL
+);
+
+-- What made up each morning's training readiness score (score itself is daily.training_readiness).
+-- Factor percentages: 100 is best. A factor Garmin had no data for stays NULL.
+CREATE TABLE IF NOT EXISTS readiness (
+    date              TEXT PRIMARY KEY,     -- YYYY-MM-DD
+    level             TEXT,                 -- POOR, LOW, MODERATE, HIGH, PRIME
+    feedback          TEXT,                 -- Garmin's short phrase, e.g. RECOVERED_AND_READY
+    recovery_time_h   REAL,                 -- hours of recovery left when scored
+    sleep_pct REAL, sleep_feedback TEXT,
+    recovery_pct REAL, recovery_feedback TEXT,
+    load_pct REAL, load_feedback TEXT,
+    hrv_pct REAL, hrv_feedback TEXT,
+    stress_pct REAL, stress_feedback TEXT,
+    sleep_history_pct REAL, sleep_history_feedback TEXT
 );
 
 CREATE TABLE IF NOT EXISTS insights (
@@ -79,7 +104,16 @@ ACTIVITY_COLS = [
 DAILY_COLS = [
     "date", "steps", "resting_hr", "hrv_avg", "sleep_s", "sleep_score", "stress_avg",
     "body_battery_high", "body_battery_low", "vo2max",
+    "training_readiness", "training_status", "acute_load", "chronic_load", "endurance_score", "hill_score",
+    "race_5k_s", "race_10k_s", "race_half_s", "race_marathon_s",
 ]
+READINESS_COLS = [
+    "date", "level", "feedback", "recovery_time_h",
+    "sleep_pct", "sleep_feedback", "recovery_pct", "recovery_feedback", "load_pct", "load_feedback",
+    "hrv_pct", "hrv_feedback", "stress_pct", "stress_feedback", "sleep_history_pct", "sleep_history_feedback",
+]
+# Columns from training_readiness on were added later; older databases gain them on connect.
+_FIRST_ADDED_DAILY_COL = "training_readiness"
 
 
 def connect() -> sqlite3.Connection:
@@ -89,6 +123,10 @@ def connect() -> sqlite3.Connection:
     conn.executescript(SCHEMA)
     if "tools_json" not in {r["name"] for r in conn.execute("PRAGMA table_info(claude_runs)")}:
         conn.execute("ALTER TABLE claude_runs ADD COLUMN tools_json TEXT")
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(daily)")}
+    for col in DAILY_COLS[DAILY_COLS.index(_FIRST_ADDED_DAILY_COL):]:
+        if col not in have:
+            conn.execute(f"ALTER TABLE daily ADD COLUMN {col} {'TEXT' if col == 'training_status' else 'REAL'}")
     return conn
 
 
@@ -108,13 +146,22 @@ def upsert_activity(conn: sqlite3.Connection, row: dict) -> None:
     )
 
 
+def upsert_readiness(conn: sqlite3.Connection, row: dict) -> None:
+    """Each row comes whole from one Garmin readiness entry, so it replaces the day's row."""
+    conn.execute(
+        f"INSERT OR REPLACE INTO readiness ({','.join(READINESS_COLS)}) "
+        f"VALUES ({','.join('?' * len(READINESS_COLS))})",
+        [row.get(c) for c in READINESS_COLS],
+    )
+
+
 def upsert_daily(conn: sqlite3.Connection, row: dict) -> None:
     """Merge a partial daily row; existing non-null values survive a null update."""
     cols = [c for c in DAILY_COLS if c in row]
     updates = ",".join(f"{c}=COALESCE(excluded.{c}, daily.{c})" for c in cols if c != "date")
     conn.execute(
         f"INSERT INTO daily ({','.join(cols)}) VALUES ({','.join('?' * len(cols))}) "
-        f"ON CONFLICT(date) DO UPDATE SET {updates}",
+        f"ON CONFLICT(date) DO {f'UPDATE SET {updates}' if updates else 'NOTHING'}",
         [row[c] for c in cols],
     )
 

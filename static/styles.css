@@ -292,9 +292,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 /* No padding on the dialog itself, so a click that lands on it is always a backdrop click. */
 .activity-dialog { padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
 .activity-dialog .dialog-body { padding: 16px 20px 20px; gap: 12px; }
-.activity-dialog .kpis { margin: 0; padding-top: 30px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
-.activity-dialog .kpis::before { top: 8px; left: 14px; }
-.activity-dialog .kpi .value { font-size: 22px; }
+.activity-dialog .kpis, .chart-card .kpis { margin: 0; padding-top: 30px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.activity-dialog .kpis::before, .chart-card .kpis::before { top: 8px; left: 14px; }
+.activity-dialog .kpi .value, .chart-card .kpi .value { font-size: 22px; }
 .activity-dialog .panel { box-shadow: none; padding: 0; }
 .act-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; border-bottom: 3px solid var(--stripe); }
 .act-head p { margin: 2px 0 0; }
@@ -328,3 +328,23 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   #kpis .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
   #kpis .kpi .value { font-size: 26px; }
 }
+/* Training readiness: this morning's score and what's behind it, above the trend. */
+.chart-card.full { grid-column: 1 / -1; }
+.readiness-now { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr); gap: 8px 32px; margin-bottom: 14px; }
+.readiness-now:empty { display: none; }
+.readiness-score { display: flex; flex-direction: column; gap: 2px; }
+.readiness-score .big { font: 600 44px/1 var(--font); color: var(--level); font-variant-numeric: tabular-nums; }
+.readiness-score .big small { font-size: 15px; font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+.readiness-score .level { font-weight: 600; color: var(--level); }
+.readiness-score .muted { font-size: 12.5px; }
+.factors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 32px; align-content: center; }
+.factor { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 5.5em; align-items: center; gap: 10px; font-size: 13px; }
+.factor .track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.factor .fill { display: block; height: 100%; border-radius: 4px; background: var(--level); }
+.factor .word { color: var(--level); font-weight: 500; text-align: right; }
+.factor.weakest .name { font-weight: 600; }
+@media (max-width: 760px) { .readiness-now { grid-template-columns: minmax(0, 1fr); } }
+
+#race-preds { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 6px; }
+#race-preds .kpi + .kpi { border-left: 0; }
+#race-preds .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }

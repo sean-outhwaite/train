@@ -19,6 +19,7 @@ def seed() -> None:
     conn = db.connect()
     today = date.today()
     fatigue = 0.0
+    acute = chronic = 0.0
     for i in range(DAYS):
         d = today - timedelta(days=DAYS - 1 - i)
         # A build block ~6-10 weeks ago, then a deload, then steady.
@@ -50,7 +51,26 @@ def seed() -> None:
             })
             day_load = mins * (hr - 50) / 100
         fatigue = fatigue * 0.8 + day_load * 0.2
+        acute += (day_load * 10 - acute) / 7
+        chronic += (day_load * 10 - chronic) / 28
         sleep_h = rng.gauss(7.3, 0.55) - (0.3 if dow in (4, 5) else 0)
+        ratio = acute / chronic if chronic > 1 else 1.0
+        status = ("STRAINED" if ratio > 1.5 else "PRODUCTIVE" if ratio > 1.1 else "MAINTAINING" if ratio > 0.8
+                  else "RECOVERY")
+        fitness = 1 - math.exp(-i / 90)  # demo runner slowly getting fitter
+        readiness = round(min(100, max(5, 72 - fatigue * 0.35 + (sleep_h - 7.3) * 10 + rng.gauss(0, 7))))
+        factors = {"sleep": 75 + (sleep_h - 7.3) * 25, "recovery": 95 - fatigue * 0.9, "load": 130 - ratio * 60,
+                   "hrv": 70 + rng.gauss(0, 12), "stress": 80 + rng.gauss(0, 8), "sleep_history": 72 + rng.gauss(0, 6)}
+        row = {"date": d.isoformat(), "recovery_time_h": round(max(0, fatigue * 0.6), 1),
+               "level": next(lv for cut, lv in ((95, "PRIME"), (75, "HIGH"), (50, "MODERATE"), (25, "LOW"), (0, "POOR"))
+                             if readiness >= cut),
+               "feedback": "RECOVERED_AND_READY" if readiness >= 75 else "RECOVERY_IN_PROGRESS"}
+        for k, pct in factors.items():
+            pct = round(min(100, max(1, pct)))
+            row[f"{k}_pct"] = pct
+            row[f"{k}_feedback"] = "VERY_GOOD" if pct >= 85 else "GOOD" if pct >= 65 else "MODERATE" if pct >= 35 else "POOR"
+        db.upsert_readiness(conn, row)
+        race_5k = 1320 - 60 * fitness + rng.gauss(0, 4)
         db.upsert_daily(conn, {
             "date": d.isoformat(),
             "steps": int(rng.gauss(9500, 2200) + (4000 if plan and plan[0] == "running" else 0)),
@@ -61,7 +81,16 @@ def seed() -> None:
             "stress_avg": round(max(10, 28 + fatigue * 0.12 + rng.gauss(0, 5))),
             "body_battery_high": round(min(100, max(40, 92 - fatigue * 0.3 + (sleep_h - 7.3) * 6 + rng.gauss(0, 4)))),
             "body_battery_low": round(max(5, rng.gauss(22, 7))),
-            "vo2max": round(51.5 + 1.8 * (1 - math.exp(-i / 90)) + rng.gauss(0, 0.15), 1) if i % 3 == 0 else None,
+            "vo2max": round(51.5 + 1.8 * fitness + rng.gauss(0, 0.15), 1) if i % 3 == 0 else None,
+            "training_readiness": readiness,
+            "training_status": status if i > 28 else None,
+            "acute_load": round(acute) if i > 7 else None,
+            "chronic_load": round(chronic) if i > 28 else None,
+            "endurance_score": round(6200 + 900 * fitness + rng.gauss(0, 25)),
+            "race_5k_s": round(race_5k),
+            "race_10k_s": round(race_5k * 2.09),
+            "race_half_s": round(race_5k * 4.63),
+            "race_marathon_s": round(race_5k * 9.8),
         })
     conn.commit()
     print(f"Seeded {DAYS} days of demo data into {db.DB_PATH}")
@@ -70,7 +99,8 @@ def seed() -> None:
 def clear() -> None:
     conn = db.connect()
     conn.execute("DELETE FROM activities WHERE source_id LIKE 'demo-%'")
-    conn.execute("DELETE FROM daily")  # demo wellness rows are indistinguishable; re-sync Garmin afterwards
+    conn.execute("DELETE FROM daily")
+    conn.execute("DELETE FROM readiness")  # demo wellness rows are indistinguishable; re-sync Garmin afterwards
     conn.execute("DELETE FROM insights")
     conn.commit()
     print("Removed demo data (wellness table cleared - re-run a Garmin sync).")
