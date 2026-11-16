@@ -56,9 +56,11 @@ def test_uds_row():
                                             {"type": "TOTAL", "averageStressLevel": 30}]},
         "bodyBattery": {"bodyBatteryStatList": [{"bodyBatteryStatType": "HIGHEST", "statsValue": 90},
                                                 {"bodyBatteryStatType": "LOWEST", "statsValue": 20}]},
+        "moderateIntensityMinutes": 20, "vigorousIntensityMinutes": 15,
     })
     assert row == {"date": "2024-03-10", "steps": 8000, "resting_hr": 52, "stress_avg": 30,
-                   "body_battery_high": 90, "body_battery_low": 20}
+                   "body_battery_high": 90, "body_battery_low": 20,
+                   "intensity_moderate_min": 20, "intensity_vigorous_min": 15}
 
 
 def test_uds_negative_stress_means_not_recorded():
@@ -69,8 +71,11 @@ def test_uds_negative_stress_means_not_recorded():
 
 def test_sleep_row():
     row = gi._sleep_row({"calendarDate": "2024-03-10", "deepSleepSeconds": 3600, "lightSleepSeconds": 14_400,
-                         "remSleepSeconds": 7200, "awakeSleepSeconds": 900, "sleepScores": {"overallScore": 80}})
-    assert row == {"date": "2024-03-10", "sleep_s": 25_200, "sleep_score": 80}
+                         "remSleepSeconds": 7200, "awakeSleepSeconds": 900, "sleepScores": {"overallScore": 80},
+                         "averageRespiration": 14.5, "spo2SleepSummary": {"averageSPO2": 95}})
+    assert row == {"date": "2024-03-10", "sleep_s": 25_200, "sleep_score": 80, "deep_sleep_s": 3600,
+                   "light_sleep_s": 14_400, "rem_sleep_s": 7200, "awake_sleep_s": 900,
+                   "respiration_avg": 14.5, "spo2_avg": 95}
     assert gi._sleep_row({"calendarDate": "2024-03-10"})["sleep_s"] is None
 
 
@@ -106,17 +111,42 @@ def export(tmp_path):
         {"calendarDate": "2024-03-10", "deepSleepSeconds": 3600, "lightSleepSeconds": 18_000},
     ]))
     (wellness / "broken_sleepData.json").write_text("{not json")
+    metrics_dir = root / "DI_CONNECT" / "DI-Connect-Metrics"
+    metrics_dir.mkdir()
+    (metrics_dir / "TrainingReadinessDTO_20240301_20240331.json").write_text(json.dumps([
+        {"calendarDate": "2024-03-10", "score": 45, "inputContext": "UPDATE_REALTIME_VARIABLES",
+         "timestampLocal": "2024-03-10T05:00:00"},
+        {"calendarDate": "2024-03-10", "score": 66, "inputContext": "AFTER_WAKEUP_RESET",
+         "timestampLocal": "2024-03-10T06:30:00", "level": "MODERATE", "recoveryTimeFactorPercent": 40,
+         "recoveryTimeFactorFeedback": "MODERATE"},
+    ]))
+    (metrics_dir / "MetricsAcuteTrainingLoad_20240301_20240331.json").write_text(json.dumps([
+        {"calendarDate": "2024-03-10", "dailyTrainingLoadAcute": 410, "dailyTrainingLoadChronic": 380},
+    ]))
+    (metrics_dir / "RunRacePredictions_20240301_20240331.json").write_text(json.dumps([
+        {"calendarDate": "2024-03-10", "raceTime5K": 1290, "raceTime10K": 2690},
+    ]))
     return root
 
 
 def test_import_folder(export):
     counts = gi.import_folder(str(export), log=lambda *_: None)
-    assert counts == {"activities": 2, "fit": 0, "wellness_days": 1, "sleep_days": 1}
+    assert counts == {"activities": 2, "fit": 0, "wellness_days": 1, "sleep_days": 1, "garmin_metric_days": 1}
     conn = db.connect()
     sports = dict(conn.execute("SELECT source_id, sport FROM activities").fetchall())
     assert sports == {"garmin-1": "running", "garmin-2": "strength"}
     day = conn.execute("SELECT steps, resting_hr, sleep_s FROM daily WHERE date = '2024-03-10'").fetchone()
     assert tuple(day) == (8000, 52, 21_600)
+    day = conn.execute("SELECT training_readiness, acute_load, chronic_load, race_5k_s, race_10k_s, race_half_s "
+                       "FROM daily WHERE date = '2024-03-10'").fetchone()
+    assert tuple(day) == (66, 410, 380, 1290, 2690, None)
+    assert tuple(conn.execute("SELECT level, recovery_pct FROM readiness").fetchone()) == ("MODERATE", 40)
+
+
+def test_metrics_row_handles_epoch_dates_and_status_phrases():
+    row = gi._metrics_row({"calendarDate": datetime(2024, 3, 10, 12).timestamp() * 1000,
+                           "trainingStatusFeedbackPhrase": "PRODUCTIVE_3", "time5K": 1300})
+    assert row == {"date": "2024-03-10", "training_status": "PRODUCTIVE", "race_5k_s": 1300}
 
 
 def test_import_is_idempotent(export):

@@ -71,6 +71,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   display: flex; gap: 8px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
   padding: 12px 24px 18px; background-color: var(--surface-1);
 }
+.brand-link { display: block; flex: none; border-radius: 6px; }
+.brand-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .brand { display: block; height: 34px; width: auto; aspect-ratio: 178 / 34; flex: none; overflow: visible; }
 .brand-word { fill: var(--text-primary); }
 .brand-accent { fill: var(--accent); }
@@ -233,9 +235,9 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 th { font-weight: 500; color: var(--text-muted); font-size: 12px; border-bottom: 2px solid var(--stripe); }
 td.num, th.num { text-align: right; }
-#acts td:first-child { font-family: var(--dot); color: var(--text-secondary); }
-#acts tbody tr { cursor: pointer; }
-#acts tbody tr:hover { background: color-mix(in srgb, var(--stripe) 8%, transparent); }
+.acts td:first-child { font-family: var(--dot); color: var(--text-secondary); }
+.acts tbody tr { cursor: pointer; }
+.acts tbody tr:hover { background: color-mix(in srgb, var(--stripe) 8%, transparent); }
 .row-link { all: unset; cursor: pointer; }
 .row-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
@@ -292,9 +294,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 /* No padding on the dialog itself, so a click that lands on it is always a backdrop click. */
 .activity-dialog { padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
 .activity-dialog .dialog-body { padding: 16px 20px 20px; gap: 12px; }
-.activity-dialog .kpis { margin: 0; padding-top: 30px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
-.activity-dialog .kpis::before { top: 8px; left: 14px; }
-.activity-dialog .kpi .value { font-size: 22px; }
+.activity-dialog .kpis, .chart-card .kpis { margin: 0; padding-top: 30px; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.activity-dialog .kpis::before, .chart-card .kpis::before { top: 8px; left: 14px; }
+.activity-dialog .kpi .value, .chart-card .kpi .value { font-size: 22px; }
 .activity-dialog .panel { box-shadow: none; padding: 0; }
 .act-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; border-bottom: 3px solid var(--stripe); }
 .act-head p { margin: 2px 0 0; }
@@ -328,3 +330,71 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   #kpis .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
   #kpis .kpi .value { font-size: 26px; }
 }
+/* Training readiness: this morning's score and what's behind it, above the trend. */
+.chart-card.full { grid-column: 1 / -1; }
+.readiness-now { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr); gap: 8px 32px; margin-bottom: 14px; }
+.readiness-now:empty { display: none; }
+.readiness-score { display: flex; flex-direction: column; gap: 2px; }
+.readiness-score .big { font: 600 44px/1 var(--font); color: var(--level); font-variant-numeric: tabular-nums; }
+.readiness-score .big small { font-size: 15px; font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+.readiness-score .level { font-weight: 600; color: var(--level); }
+.readiness-score .muted { font-size: 12.5px; }
+.factors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 32px; align-content: center; }
+.factor { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 5.5em; align-items: center; gap: 10px; font-size: 13px; }
+.factor .track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.factor .fill { display: block; height: 100%; border-radius: 4px; background: var(--level); }
+.factor .word { color: var(--level); font-weight: 500; text-align: right; }
+.factor.weakest .name { font-weight: 600; }
+@media (max-width: 760px) { .readiness-now { grid-template-columns: minmax(0, 1fr); } }
+
+#bench-tiles { margin-bottom: 12px; }
+.gear-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.gear-item .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.gear-item .name { font-weight: 600; }
+.gear-item .muted { font-size: 12.5px; }
+.gear-item .track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.gear-item .fill { display: block; height: 100%; border-radius: 4px; background: var(--series-1); }
+.gear-item.warn .fill { background: var(--serious); }
+.gear-item .flag { color: var(--serious); font-weight: 600; font-size: 12.5px; }
+
+#race-preds { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 6px; }
+#race-preds .kpi + .kpi { border-left: 0; }
+#race-preds .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
+
+/* Tabs are platform signs: the current one is lit in the sign colour with the livery stripe under it. */
+.tabs { display: flex; gap: 6px; margin: 0 0 18px; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 2px solid var(--border); }
+.tab { display: inline-flex; flex-direction: column; gap: 1px; padding: 6px 16px 8px; border-radius: 6px 6px 0 0;
+  color: var(--text-secondary); text-decoration: none; font-weight: 500; white-space: nowrap; margin-bottom: -4px;
+  border-bottom: 4px solid transparent; }
+.tab::before { content: attr(data-jp); font-size: 10px; letter-spacing: .12em; opacity: .75; }
+.tab:hover { background: var(--surface-2); color: var(--text-primary); }
+.tab[aria-selected="true"] { background: var(--sign); color: var(--sign-ink); border-bottom-color: var(--stripe-2); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-secondary); cursor: pointer; }
+.chip .dot { width: 8px; height: 8px; }
+.chip:hover { background: var(--surface-2); }
+.chip[aria-pressed="true"] { background: var(--sign); border-color: var(--sign); color: var(--sign-ink); }
+
+/* Personal records: trophy cards in a group per sport, each with the sport's colour down its side. */
+.record-group + .record-group { margin-top: 18px; }
+.record-group-head { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--text-secondary); margin: 6px 0 10px; }
+.record-group-head::after { content: ""; flex: 1; height: 3px; background: var(--sport); }
+.record-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); gap: 10px; }
+@media (max-width: 860px) { .record-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .record-value { font-size: 24px; } }
+.record-card { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: var(--surface-2);
+  border-left: 5px solid var(--sport); border-radius: 0 22px 6px 0; }
+.record-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.record-top h4 { margin: 0; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.record-value { font: 400 28px/1.3 var(--dot); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.record-value small { font-size: 14px; color: var(--text-muted); margin-left: 4px; }
+.record-meta { font-size: 12.5px; color: var(--text-muted); }
+.record-meta:empty { display: none; }
+.record-card .btn.link { align-self: flex-start; margin-top: 6px; font-size: 13px; text-align: left; }
+.badge-new { font: 400 11px/1 var(--dot); letter-spacing: .08em; padding: 3px 7px 4px; border-radius: 4px;
+  background: var(--sign-accent); color: var(--sign-accent-ink); }

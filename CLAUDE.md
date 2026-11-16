@@ -15,7 +15,7 @@ Claude generates insights and answers chat questions. See README.md for setup.
 
 Tests run against a temporary database and a fake `claude` script. Keep test data made up, never real exports.
 
-`--clear` on `app.seed` empties the whole `daily` table, including real data. Clear demo data before syncing.
+`--clear` on `app.seed` empties the whole `daily`, `readiness` and `benchmarks` tables, including real data. Clear demo data before syncing.
 
 ## Rules
 

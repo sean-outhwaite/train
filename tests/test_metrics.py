@@ -154,7 +154,41 @@ def test_kpis_hide_tiles_without_data(conn):
     conn.commit()
     keys = {t["key"] for t in metrics.kpis(conn)}
     assert {"duration_min", "distance_km", "tsb"} <= keys
-    assert not keys & {"resting_hr", "hrv_avg", "sleep_h"}
+    assert not keys & {"resting_hr", "hrv_avg", "sleep_h", "training_readiness"}
+
+
+def test_readiness_kpi_is_latest_score(conn):
+    for day, score in (("2024-03-02", 50), ("2024-03-08", 62), ("2024-03-09", 80)):
+        db.upsert_daily(conn, {"date": day, "training_readiness": score})
+    db.upsert_daily(conn, {"date": "2024-03-10", "steps": 5000})  # no readiness on the last day
+    conn.commit()
+    tile = next(t for t in metrics.kpis(conn) if t["key"] == "training_readiness")
+    assert (tile["current"], tile["previous"]) == (80, 50)
+
+
+def test_readiness_latest_skips_days_without_a_score(conn):
+    db.upsert_daily(conn, {"date": "2024-03-09", "training_readiness": 64})
+    db.upsert_readiness(conn, {"date": "2024-03-09", "level": "MODERATE", "sleep_pct": 70, "sleep_feedback": "GOOD",
+                               "recovery_pct": 20, "recovery_feedback": "POOR"})
+    db.upsert_readiness(conn, {"date": "2024-03-10", "level": "HIGH"})  # no score in daily
+    conn.commit()
+    r = metrics.readiness_latest(conn)
+    assert (r["date"], r["score"], r["level"]) == ("2024-03-09", 64, "MODERATE")
+    assert [(f["key"], f["percent"], f["feedback"]) for f in r["factors"]] == [("sleep", 70, "GOOD"), ("recovery", 20, "POOR")]
+    assert "recovery_time_h" not in r
+    assert metrics.summary_for_claude(conn, 10)["readiness_latest"] == r
+
+
+def test_race_predictions_become_minutes_and_reach_claude(conn):
+    db.upsert_daily(conn, {"date": "2024-03-01", "race_5k_s": 1320, "training_status": "PRODUCTIVE"})
+    db.upsert_daily(conn, {"date": "2024-03-10", "race_5k_s": 1290})
+    conn.commit()
+    frame = metrics.daily_frame(conn, 10)
+    assert [r["race_5k_min"] for r in frame if r["race_5k_min"]] == [22.0, 21.5]
+    summary = metrics.summary_for_claude(conn, 10)
+    assert summary["race_5k_min"] == {"first": 22.0, "latest": 21.5}
+    assert "race_marathon_min" not in summary
+    assert "race_marathon_min" in summary["data_coverage"]["not_recorded"]
 
 
 def test_activity_detail_keeps_owner_fields_out(conn):
@@ -170,3 +204,53 @@ def test_activity_detail_keeps_owner_fields_out(conn):
     assert a["fastest"] == [{"label": "1 km", "seconds": 240.5}]
     assert a["has_route"] is True
     assert metrics.activity_detail(conn, "missing") is None
+
+
+
+def test_intensity_minutes_count_vigorous_double(conn):
+    db.upsert_daily(conn, {"date": "2024-03-09", "intensity_moderate_min": 20, "intensity_vigorous_min": 10})
+    db.upsert_daily(conn, {"date": "2024-03-10", "steps": 100})
+    conn.commit()
+    frame = metrics.daily_frame(conn, 2)
+    assert [r["intensity_min"] for r in frame] == [40, None]
+
+
+def test_gear_warns_near_retirement(conn):
+    db.replace_rows(conn, "gear", [
+        {"uuid": "a", "name": "Worn", "status": "active", "max_m": 500_000, "distance_m": 460_000},
+        {"uuid": "b", "name": "New", "status": "active", "max_m": 500_000, "distance_m": 100_000},
+        {"uuid": "c", "name": "No limit", "status": "active", "distance_m": 900_000},
+        {"uuid": "d", "name": "Old", "status": "retired", "distance_m": 800_000},
+    ])
+    g = metrics.gear(conn)
+    assert [(i["name"], i["warn"]) for i in g["active"]] == [("No limit", False), ("Worn", True), ("New", False)]
+    assert g["active"][1]["worn"] == 0.92 and g["retired"] == 1
+
+
+def test_activity_extras_hide_a_single_lap(conn):
+    db.replace_rows(conn, "activity_laps", [{"source_id": "a1", "lap_index": 1, "distance_m": 5000}])
+    db.upsert_row(conn, "activity_weather", {"source_id": "a1"})
+    assert metrics.activity_extras(conn, "a1") == {"laps": [], "weather": None}
+
+
+def test_benchmarks_compare_with_a_year_ago(conn):
+    from datetime import date, timedelta
+    old, mid, new = (date.today() - timedelta(days=n) for n in (500, 200, 10))
+    for d, v in ((old, 160), (mid, 170), (new, 174)):
+        db.upsert_row(conn, "benchmarks", {"date": d.isoformat(), "metric": "lt_hr", "value": v})
+    (t,) = metrics.benchmarks(conn)["thresholds"]
+    assert (t["first"], t["first_date"], t["latest"]) == (170, mid.isoformat(), 174)
+
+
+def test_records_carry_activity_name_and_distance(conn):
+    db.upsert_activity(conn, {"source_id": "a1", "start_time": "2026-01-01T07:00:00", "sport": "running",
+                              "name": "Morning run"})
+    db.replace_rows(conn, "personal_records", [
+        {"type_id": 3, "label": "5K", "sport": "running", "kind": "time", "value": 1300, "date": "2026-01-01",
+         "source_id": "a1"},
+        {"type_id": 12, "label": "Most steps in a day", "sport": "steps", "kind": "count", "value": 20000,
+         "date": "2026-01-02", "source_id": "gone"},
+    ])
+    five_k, steps = metrics.benchmarks(conn)["records"]
+    assert (five_k["activity_name"], five_k["distance_m"], five_k["source_id"]) == ("Morning run", 5000, "a1")
+    assert "distance_m" not in steps and "activity_name" not in steps and "source_id" not in steps

@@ -85,7 +85,10 @@ PROMPT = """Review my last {days} days of Garmin data (summary below) and give m
 
 Look for: training load trend and ramp rate, current form (TSB), fitness direction (CTL, VO2 max),
 consistency, and anything unusual in the last two weeks. Include recovery signals and how they respond to
-load, using only the metrics that were recorded. You may call the healthdb tools to check details first.
+load, using only the metrics that were recorded. Where Garmin's own readiness, training status, load or race
+predictions were recorded, say where they agree or disagree with this app's TRIMP-based form and fitness.
+Recent activities include the weather where known: allow for heat and humidity when reading heart rate.
+You may call the healthdb tools to check details first.
 
 If Strava tools are available, use get_athlete_best_efforts and get_athlete_zones where they add something
 Garmin lacks. Per-activity Strava tools cost one call each, so use them for two or three notable sessions at

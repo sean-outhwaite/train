@@ -7,6 +7,9 @@ Reads, wherever they sit in the folder tree:
   *summarizedActivities*.json   activity summaries
   *sleepData*.json              sleep duration + score
   UDSFile*.json                 steps, resting HR, stress, Body Battery
+  *TrainingReadiness*.json      training readiness
+  *AcuteTrainingLoad*.json, *TrainingHistory*.json, *RacePredictions*.json, *EnduranceScore*.json,
+  *HillScore*.json              Garmin's load, training status, race predictions and scores
   *.fit                         activity files (used for activities missing from the summaries)
 Export formats drift between years, so every field is read defensively.
 """
@@ -16,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import db
-from .garmin_sync import _sport
+from .garmin_sync import _readiness_by_day, _sport, readiness_row, status_name
 
 
 def _load(path: Path):
@@ -104,6 +107,8 @@ def _uds_row(d: dict) -> dict:
         "stress_avg": stress if (stress or 0) >= 0 else None,
         "body_battery_high": bb.get("HIGHEST"),
         "body_battery_low": bb.get("LOWEST"),
+        "intensity_moderate_min": d.get("moderateIntensityMinutes"),
+        "intensity_vigorous_min": d.get("vigorousIntensityMinutes"),
     }
 
 
@@ -113,7 +118,49 @@ def _sleep_row(s: dict) -> dict:
         "date": s.get("calendarDate"),
         "sleep_s": total,
         "sleep_score": (s.get("sleepScores") or {}).get("overallScore"),
+        "deep_sleep_s": s.get("deepSleepSeconds"),
+        "light_sleep_s": s.get("lightSleepSeconds"),
+        "rem_sleep_s": s.get("remSleepSeconds"),
+        "awake_sleep_s": s.get("awakeSleepSeconds"),
+        "respiration_avg": s.get("averageRespiration") or s.get("averageRespirationValue"),
+        "spo2_avg": (s.get("spo2SleepSummary") or {}).get("averageSPO2") or s.get("averageSpO2Value"),
     }
+
+
+def _day(v) -> str | None:
+    if isinstance(v, (int, float)):  # epoch ms
+        return datetime.fromtimestamp(v / 1000).date().isoformat()
+    return str(v)[:10] if v else None
+
+
+def _first(d: dict, *keys):
+    return next((d[k] for k in keys if d.get(k) is not None), None)
+
+
+def _metrics_row(d: dict) -> dict:
+    """One record from Garmin's metrics files. Each file type fills a few of these, the rest stay absent."""
+    fields = {
+        "training_status": status_name(_first(d, "trainingStatusFeedbackPhrase", "trainingStatus")),
+        "acute_load": _first(d, "dailyTrainingLoadAcute", "acuteTrainingLoad"),
+        "chronic_load": _first(d, "dailyTrainingLoadChronic", "chronicTrainingLoad"),
+        "race_5k_s": _first(d, "time5K", "raceTime5K"),
+        "race_10k_s": _first(d, "time10K", "raceTime10K"),
+        "race_half_s": _first(d, "timeHalfMarathon", "raceTimeHalf", "raceTimeHalfMarathon"),
+        "race_marathon_s": _first(d, "timeMarathon", "raceTimeMarathon"),
+    }
+    return {"date": _day(d.get("calendarDate")), **{k: v for k, v in fields.items() if v is not None}}
+
+
+METRIC_FILES = ["*AcuteTrainingLoad*.json", "*TrainingHistory*.json", "*RacePredictions*.json"]
+SCORE_FILES = {"*EnduranceScore*.json": "endurance_score", "*HillScore*.json": "hill_score"}
+
+
+def _records(root: Path, pattern: str):
+    for f in root.rglob(pattern):
+        data = _load(f)
+        for d in data if isinstance(data, list) else [data]:
+            if isinstance(d, dict) and d.get("calendarDate"):
+                yield d
 
 
 def import_folder(folder: str, log=print) -> dict:
@@ -121,7 +168,7 @@ def import_folder(folder: str, log=print) -> dict:
     if not root.is_dir():
         raise FileNotFoundError(f"{root} is not a folder - unzip the Garmin export first")
     conn = db.connect()
-    counts = {"activities": 0, "fit": 0, "wellness_days": 0, "sleep_days": 0}
+    counts = {"activities": 0, "fit": 0, "wellness_days": 0, "sleep_days": 0, "garmin_metric_days": 0}
 
     for f in root.rglob("*summarizedActivities*.json"):
         for block in _load(f) or []:
@@ -149,6 +196,26 @@ def import_folder(folder: str, log=print) -> dict:
             if isinstance(s, dict) and s.get("calendarDate"):
                 db.upsert_daily(conn, _sleep_row(s))
                 counts["sleep_days"] += 1
+
+    readiness = [{**d, "calendarDate": _day(d["calendarDate"])} for d in _records(root, "*TrainingReadiness*.json")]
+    days = {}
+    for day, e in _readiness_by_day(readiness).items():
+        days[day] = {"date": day, "training_readiness": e["score"]}
+        db.upsert_readiness(conn, readiness_row(e))
+    for pattern in METRIC_FILES:
+        for d in _records(root, pattern):
+            row = _metrics_row(d)
+            if len(row) > 1:
+                days.setdefault(row["date"], {}).update(row)
+    for pattern, col in SCORE_FILES.items():
+        for d in _records(root, pattern):
+            score = _first(d, "overallScore", "enduranceScore", "hillScore")
+            if score is not None:
+                day = _day(d["calendarDate"])
+                days.setdefault(day, {"date": day})[col] = score
+    for row in days.values():
+        db.upsert_daily(conn, row)
+    counts["garmin_metric_days"] = len(days)
     conn.commit()
     log(counts)
     return counts
