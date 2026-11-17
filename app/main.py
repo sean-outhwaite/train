@@ -47,22 +47,39 @@ async def status():
         "data": {"activities": counts["acts"], "days": counts["days"], "demo": counts["demo"] > 0,
                  "latest": db.latest_date(conn), "synced_at": db.get_meta(conn, "garmin_synced_at")},
         "strava": {"discovered": strava is not None, "tools": len(strava["strava_tools"]) if strava else 0},
-        "settings": {"hr_zone_basis": db.get_meta(conn, "hr_zone_basis") or ""},
+        "settings": _settings(conn),
     }
 
 
 class SettingsRequest(BaseModel):
-    hr_zone_basis: str
+    # Each field is optional: only the ones sent are changed. An empty string clears a setting.
+    hr_zone_basis: str | None = None
+    training_plan: str | None = None
 
 
 @app.post("/api/settings")
 def save_settings(req: SettingsRequest):
     if req.hr_zone_basis and req.hr_zone_basis not in claude_cli.HR_ZONE_BASES:
         raise HTTPException(400, "Unknown heart-rate zone basis.")
+    plan = None
+    if req.training_plan:
+        try:
+            plan = claude_cli.parse_plan_link(req.training_plan)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     conn = db.connect()
-    db.set_meta(conn, "hr_zone_basis", req.hr_zone_basis)
+    if req.hr_zone_basis is not None:
+        db.set_meta(conn, "hr_zone_basis", req.hr_zone_basis)
+    if req.training_plan is not None:
+        db.set_meta(conn, "training_plan_doc", plan or "")
     conn.commit()
-    return {"hr_zone_basis": req.hr_zone_basis}
+    return _settings(conn)
+
+
+def _settings(conn) -> dict:
+    plan = db.get_meta(conn, "training_plan_doc")
+    return {"hr_zone_basis": db.get_meta(conn, "hr_zone_basis") or "",
+            "training_plan": f"https://claude.ai/artifact/{plan}" if plan else ""}
 
 
 @app.get("/api/dashboard")

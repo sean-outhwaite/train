@@ -93,8 +93,9 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .status-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .status-pop li { display: flex; align-items: center; gap: 8px; }
 .status-pop .setting { display: grid; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.status-pop select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border);
+.status-pop select, .status-pop input { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text-primary); }
+.status-pop input { width: 280px; max-width: 100%; }
 
 /* Buttons are small square signs with a darker lower edge that presses in. */
 .btn { font: inherit; font-weight: 500; padding: 6px 14px 8px; border-radius: 4px; border: 1px solid var(--border);

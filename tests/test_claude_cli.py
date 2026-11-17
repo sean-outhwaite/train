@@ -177,7 +177,9 @@ def test_cli_args_allow_only_read_only_tools(monkeypatch):
     monkeypatch.delenv("STRAVA_MCP_SERVER", raising=False)
     args = claude_cli._base_args(None, None, persist=False)
     assert args[args.index("--tools") + 1] == ""
-    assert args[args.index("--allowedTools") + 1:args.index("--system-prompt")] == ["mcp__healthdb"]
+    assert args[args.index("--allowedTools") + 1:args.index("--disallowedTools")] == ["mcp__healthdb"]
+    # With no training plan linked, the whole Claude Docs connector is denied.
+    assert args[args.index("--disallowedTools") + 1:args.index("--system-prompt")] == [claude_cli.DOCS_SERVER]
     assert "--no-session-persistence" in args
     assert not any("dangerously" in a or "bypass" in a.lower() for a in args)
 
@@ -186,3 +188,15 @@ def test_runs_start_outside_the_project():
     # Claude Code loads CLAUDE.md from the working directory and its parents.
     real_run_dir = claude_cli.Path.home() / ".cache" / "train"
     assert db.ROOT not in [real_run_dir, *real_run_dir.parents]
+
+
+def test_linked_plan_allows_only_the_docs_read_tool(monkeypatch, conn):
+    monkeypatch.delenv("STRAVA_MCP_SERVER", raising=False)
+    db.set_meta(conn, "training_plan_doc", "AbCdEfGhIjKlMnOpQrStUv")
+    conn.commit()
+    args = claude_cli._base_args(None, None, persist=False)
+    allowed = args[args.index("--allowedTools") + 1:args.index("--disallowedTools")]
+    denied = args[args.index("--disallowedTools") + 1:args.index("--system-prompt")]
+    assert allowed == ["mcp__healthdb", claude_cli.DOCS_READ_TOOL]
+    assert set(denied) == {f"{claude_cli.DOCS_SERVER}__{t}" for t in ("batch", "create", "delete", "update", "export", "guide", "query")}
+    assert claude_cli.DOCS_SERVER not in allowed  # never the whole server, which includes write tools

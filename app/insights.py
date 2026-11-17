@@ -106,10 +106,17 @@ For each insight:
 - severity: positive | info | watch | concern
 - chart: include when a picture helps, using only these metric keys: {metric_keys}
 
-The final answer must be the JSON object only.
+{plan}The final answer must be the JSON object only.
 
 Summary (weekly rollups, last 14 days, recent activities):
 {summary}"""
+
+
+PLAN_TASK = """My training plan is linked (see the system prompt). Read it first and include one insight on how
+the last two weeks compare with it, and whether load and recovery support the next block. Say in the evidence
+when a point comes from the plan.
+
+"""
 
 
 def _extract(result_event: dict) -> dict:
@@ -129,6 +136,7 @@ async def generate(days: int = 90) -> AsyncIterator[tuple[str, dict]]:
     summary = metrics.summary_for_claude(conn, days)
     metric_keys = sorted(metrics.available_metrics(conn, days))
     prompt = PROMPT.format(days=days, metric_keys=", ".join(metric_keys),
+                           plan=PLAN_TASK if claude_cli.training_plan_id() else "",
                            summary=json.dumps(summary, separators=(",", ":")))
     last_error = None
     for attempt in range(2):

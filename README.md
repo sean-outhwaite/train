@@ -11,6 +11,9 @@ and you don't need an API key.
   Strava-only detail (segments, kudos, Relative Effort, gear). Strava is only reached through that connector,
   because Strava's API policy bans AI use of API data. Strava data isn't stored, apart from any figures
   quoted in saved insight reports.
+- **Training plan:** paste the link to a Claude Docs doc holding your plan into the Status menu, and insights
+  and chat read it live through your claude.ai Claude Docs connector to compare it with what you actually did.
+  Claude can only read the plan: every other Claude Docs tool is blocked.
 
 ![Overview tab with insights, training readiness and weekly training time](docs/screenshots/dashboard.png)
 
@@ -77,7 +80,7 @@ tests never touch `data/` or use your Claude plan.
 | File | Role |
 |---|---|
 | `app/metrics.py` | Training load (Banister TRIMP), CTL/ATL/TSB, KPIs, the summary sent to Claude |
-| `app/claude_cli.py` | Runs `claude -p --output-format stream-json` with built-in tools disabled. Only `healthdb` and Strava tools are allowed |
+| `app/claude_cli.py` | Runs `claude -p --output-format stream-json` with built-in tools disabled. Only `healthdb`, Strava and the Claude Docs read tool are allowed |
 | `app/healthdb_mcp.py` | stdio MCP server: `query_data` (read-only, single SELECT), `get_metric_series`, `show_chart` |
 | `app/insights.py` | Gets JSON insights from Claude via `--json-schema` and validates them with Pydantic |
 | `app/main.py` | FastAPI routes; chat is streamed to the browser as server-sent events |
