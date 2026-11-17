@@ -92,10 +92,22 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
   box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
 .status-pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .status-pop li { display: flex; align-items: center; gap: 8px; }
-.status-pop .setting { display: grid; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.status-pop select, .status-pop input { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border);
+.status-pop .settings { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.status-pop .setting { display: grid; gap: 4px; }
+.status-pop .setting-row { display: flex; align-items: center; gap: 8px; }
+.status-pop .setting-row .dot { background: var(--text-muted); }
+.status-pop .setting.is-set .dot { background: var(--good); }
+.status-pop .setting-value { color: var(--text-primary); }
+.status-pop a.setting-value { color: var(--accent); text-decoration: none; }
+.status-pop a.setting-value:hover { text-decoration: underline; }
+.status-pop .setting-change { display: grid; place-items: center; margin-left: auto; width: 20px; height: 20px; padding: 0;
+  border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.status-pop .setting-change svg { width: 14px; height: 14px; }
+.status-pop .setting-change:hover { color: var(--accent); background: var(--surface-2); }
+.status-pop select, .status-pop input { font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text-primary); }
 .status-pop input { width: 280px; max-width: 100%; }
+.status-pop .setting [hidden] { display: none; }
 
 /* Buttons are small square signs with a darker lower edge that presses in. */
 .btn { font: inherit; font-weight: 500; padding: 6px 14px 8px; border-radius: 4px; border: 1px solid var(--border);

@@ -45,17 +45,26 @@
     </div>
     <div id="status-pop" class="status-pop" popover>
       <ul id="status-list"></ul>
-      <label class="setting">Heart-rate zones based on
-        <select id="hr-zone-basis">
-          <option value="">Not set</option>
-          <option value="max_hr">Max heart rate</option>
-          <option value="threshold_hr">Threshold heart rate</option>
-          <option value="hr_reserve">Heart-rate reserve</option>
-        </select>
-      </label>
-      <label class="setting">Training plan (Claude Docs link, read only)
-        <input id="training-plan" type="url" placeholder="https://claude.ai/artifact/…" autocomplete="off">
-      </label>
+      <!-- Settings read like the status rows: a green dot and the value once set. The control shows only while
+           unset or after Change. -->
+      <div class="settings">
+        <div class="setting" id="setting-hr">
+          <div class="setting-row"><span class="dot"></span><label for="hr-zone-basis">Heart-rate zones:</label>
+            <span class="setting-value"></span><button type="button" class="setting-change" aria-label="Change heart-rate zones" title="Change"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 2.3a1.5 1.5 0 0 1 2.1 0l.4.4a1.5 1.5 0 0 1 0 2.1L6 12.5 2.5 13.5l1-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button></div>
+          <select id="hr-zone-basis">
+            <option value="">Not set</option>
+            <option value="max_hr" data-short="Max HR">Max heart rate</option>
+            <option value="threshold_hr" data-short="Threshold">Threshold heart rate</option>
+            <option value="hr_reserve" data-short="HR reserve">Heart-rate reserve</option>
+          </select>
+        </div>
+        <div class="setting" id="setting-plan">
+          <div class="setting-row"><span class="dot"></span><label for="training-plan">Training plan:</label>
+            <a class="setting-value" target="_blank" rel="noopener" title="Open the plan (Claude reads it, never edits it)">Linked</a>
+            <button type="button" class="setting-change" aria-label="Change training plan" title="Change"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 2.3a1.5 1.5 0 0 1 2.1 0l.4.4a1.5 1.5 0 0 1 0 2.1L6 12.5 2.5 13.5l1-3.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button></div>
+          <input id="training-plan" type="url" placeholder="Claude Docs link: https://claude.ai/artifact/…" autocomplete="off">
+        </div>
+      </div>
     </div>
   </header>
 

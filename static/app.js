@@ -965,8 +965,7 @@ async function loadStatus() {
     syncRow(s.data.synced_at),
     { ok: s.strava.tools > 0, text: s.strava.tools > 0 ? "Strava connector" : "Strava connector not found" },
   ];
-  $("#hr-zone-basis").value = s.settings.hr_zone_basis;
-  $("#training-plan").value = s.settings.training_plan;
+  renderSettings(s.settings);
   const dot = (ok) => css(ok ? "--good" : "--warning");
   $("#status-list").innerHTML = rows.map((r) => `<li><span class="dot" style="background:${dot(r.ok)}"></span>${r.text}</li>`).join("");
   // The header stays quiet unless something needs attention.
@@ -1035,18 +1034,42 @@ $("#activity-dialog").addEventListener("click", (e) => {
 });
 $("#status-pop").addEventListener("beforetoggle", (e) => {
   if (e.newState !== "open") return;
+  if (settings) renderSettings(settings);  // a setting left mid-change goes back to its saved value
   const r = $("#btn-status").getBoundingClientRect();
   e.target.style.top = `${r.bottom + 6}px`;
   e.target.style.right = `${document.documentElement.clientWidth - r.right}px`;
 });
+// A set value shows as text with a Change button. The control shows only while unset or being changed.
+let settings = null;
+function showSetting(id, value, editing) {
+  const box = $(id);
+  box.classList.toggle("is-set", !!value);
+  for (const el of box.querySelectorAll(".setting-value, .setting-change")) el.hidden = !value || editing;
+  box.querySelector("select, input").hidden = !!value && !editing;
+}
+function renderSettings(s) {
+  settings = s;
+  const hr = $("#hr-zone-basis");
+  hr.value = s.hr_zone_basis;
+  $("#setting-hr .setting-value").textContent = hr.selectedOptions[0]?.dataset.short || "";
+  showSetting("#setting-hr", s.hr_zone_basis, false);
+  $("#training-plan").value = s.training_plan;
+  $("#setting-plan .setting-value").href = s.training_plan || "#";
+  showSetting("#setting-plan", s.training_plan, false);
+}
 async function saveSetting(body) {
   try {
-    const saved = await api("/api/settings", { method: "POST", body: JSON.stringify(body) });
-    $("#training-plan").value = saved.training_plan;
+    renderSettings(await api("/api/settings", { method: "POST", body: JSON.stringify(body) }));
   } catch (err) {
     showBanner(`<b>Settings:</b> ${escapeHtml(err.message)}`);
     loadStatus();
   }
+}
+for (const [box, key] of [["#setting-hr", "hr_zone_basis"], ["#setting-plan", "training_plan"]]) {
+  $(`${box} .setting-change`).addEventListener("click", () => {
+    showSetting(box, settings[key], true);
+    $(box).querySelector("select, input").focus();
+  });
 }
 $("#hr-zone-basis").addEventListener("change", (e) => saveSetting({ hr_zone_basis: e.target.value }));
 $("#training-plan").addEventListener("change", (e) => saveSetting({ training_plan: e.target.value.trim() }));
