@@ -1,4 +1,5 @@
 """Derived metrics shared by the dashboard, the insights prompt and Claude's chart tool."""
+import itertools
 import json
 import math
 import sqlite3
@@ -303,6 +304,53 @@ def weekly_volume(conn: sqlite3.Connection, weeks: int = 16) -> dict:
     # Largest sports first so colour slots follow volume, then fixed for the session.
     ordered = sorted(by_sport.items(), key=lambda kv: -sum(kv[1]))
     return {"weeks": week_starts, "sports": [{"sport": s, "hours": [round(h, 2) for h in v]} for s, v in ordered]}
+
+
+def _year_totals(rows: list) -> dict:
+    return {"activities": len(rows), "active_days": len({r["d"] for r in rows}),
+            "hours": round(sum(r["duration_s"] or 0 for r in rows) / 3600, 1),
+            "distance_km": round(sum(r["distance_m"] or 0 for r in rows) / 1000, 1),
+            "elev_m": round(sum(r["elev_gain_m"] or 0 for r in rows))}
+
+
+def year_stats(conn: sqlite3.Connection, today: date | None = None) -> dict | None:
+    """Calendar year to date: totals against the same dates last year, a split by sport, and cumulative
+    hours for both years by day of year. None when nothing is recorded this year."""
+    today = today or date.today()
+    start, prev_start = date(today.year, 1, 1), date(today.year - 1, 1, 1)
+    # 29 Feb has no twin last year, so compare through 28 Feb.
+    prev_today = today.replace(year=today.year - 1, day=min(today.day, 28 if today.month == 2 else today.day))
+    rows = conn.execute(
+        "SELECT substr(start_time,1,10) d, sport, duration_s, distance_m, elev_gain_m FROM activities "
+        "WHERE substr(start_time,1,10) BETWEEN ? AND ?", (prev_start.isoformat(), today.isoformat())).fetchall()
+    cur = [r for r in rows if r["d"] >= start.isoformat()]
+    if not cur:
+        return None
+    prev = [r for r in rows if r["d"] <= prev_today.isoformat() and r["d"] < start.isoformat()]
+
+    sports = {}
+    for r in cur:
+        sports.setdefault(r["sport"], []).append(r)
+    # A sum of zero means nothing was recorded (e.g. no distance for strength), so it's left out.
+    by_sport = [{"sport": s, **{k: v for k, v in _year_totals(rs).items() if v},
+                 **_present({"longest_km": round(max(r["distance_m"] or 0 for r in rs) / 1000, 2) or None})}
+                for s, rs in sorted(sports.items(), key=lambda kv: -sum(r["duration_s"] or 0 for r in kv[1]))]
+
+    def cumulative(rs: list, first: date, days: int) -> list[float]:
+        per_day = [0.0] * days
+        for r in rs:
+            i = (date.fromisoformat(r["d"]) - first).days
+            if 0 <= i < days:
+                per_day[i] += (r["duration_s"] or 0) / 3600
+        return [round(v, 2) for v in itertools.accumulate(per_day)]
+
+    days = (today - start).days + 1
+    return {"year": today.year, "through": today.isoformat(), "previous_through": prev_today.isoformat(),
+            "totals": _year_totals(cur), "previous": _year_totals(prev) if prev else None,
+            "sports": by_sport,
+            "cumulative": {"dates": [(start + timedelta(days=i)).isoformat() for i in range(days)],
+                           "hours": cumulative(cur, start, days),
+                           "previous_hours": cumulative(prev, prev_start, days) if prev else None}}
 
 
 def _mean(vals: list) -> float | None:

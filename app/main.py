@@ -97,6 +97,7 @@ def dashboard(days: int = 90):
         "readiness": metrics.readiness_latest(conn),
         "benchmarks": metrics.benchmarks(conn),
         "gear": metrics.gear(conn),
+        "year": metrics.year_stats(conn),
         "weekly": metrics.weekly_volume(conn, 16),
         "daily": frame,
         "activities": acts,

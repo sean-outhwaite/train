@@ -202,6 +202,50 @@ function renderCharts(d) {
   renderRacePredictions(d.daily);
   renderBenchmarks(d.benchmarks);
   renderGear(d.gear);
+  renderYear(d.year);
+}
+
+// Calendar year to date. Tiles compare with the same dates last year; zero totals are hidden as not recorded.
+function renderYear(y) {
+  $("#year-card").hidden = !y;
+  if (!y) return;
+  $("#year-title").textContent = `This year · ${y.year}`;
+  $("#year-note").textContent = `1 January to ${fmtLongDate(y.through)}` + (y.previous ? ", against the same dates last year" : "");
+  const tiles = [
+    ["hours", "Training time", "h", 1], ["distance_km", "Distance", "km", 0], ["elev_m", "Elevation gain", "m", 0],
+    ["activities", "Activities", "", 0], ["active_days", "Active days", "", 0],
+  ].filter(([key]) => y.totals[key]).map(([key, label, unit, digits]) => {
+    const prev = y.previous?.[key];
+    let delta = "";  // the note already says when there's nothing to compare with
+    if (prev) {
+      const pct = Math.round((y.totals[key] / prev - 1) * 100);
+      delta = pct === 0 ? "■ same as last year" : `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs last year`;
+    }
+    return `<div class="kpi"><div class="label">${label}</div>
+      <div class="value">${fmtNum(y.totals[key], digits)}${unit ? `<small>${unit}</small>` : ""}</div>
+      <div class="delta" title="${prev ? `${fmtNum(prev, digits)} ${unit} by ${fmtLongDate(y.previous_through)}` : ""}">${delta}</div></div>`;
+  }).join("");
+  $("#year-tiles").innerHTML = tiles;
+
+  // Columns appear only when some sport recorded them.
+  const cols = [
+    ["Activities", (s) => s.activities && fmtNum(s.activities, 0)],
+    ["Time", (s) => s.hours && `${fmtNum(s.hours, 1)} h`],
+    ["Distance", (s) => s.distance_km && `${fmtNum(s.distance_km, 0)} km`],
+    ["Elevation", (s) => s.elev_m && `${fmtNum(s.elev_m, 0)} m`],
+    ["Longest", (s) => s.longest_km && `${fmtNum(s.longest_km, 1)} km`],
+  ].filter(([, get]) => y.sports.some(get));
+  $("#year-sports").innerHTML = `<thead><tr><th>Sport</th>${cols.map(([h]) => `<th class="num">${h}</th>`).join("")}</tr></thead>
+    <tbody>${y.sports.map((s) => `<tr><td><span class="pill"><span class="dot" style="background:${sportColor(s.sport)}"></span>${escapeHtml(titleCase(s.sport))}</span></td>
+      ${cols.map(([, get]) => `<td class="num">${get(s) || "–"}</td>`).join("")}</tr>`).join("")}</tbody>`;
+
+  const c = y.cumulative;
+  const datasets = [line(String(y.year), c.hours, css("--series-1"))];
+  if (c.previous_hours) datasets.push(line(String(y.year - 1), c.previous_hours, withAlpha(css("--text-muted"), 0.7), { borderDash: [5, 4] }));
+  const opts = baseOptions({ unit: "h" });
+  if (datasets.length === 1) opts.plugins.legend.display = false;
+  $("#year-chart-note").textContent = c.previous_hours ? "hours, this year against last" : "hours";
+  draw("c-year", { data: { labels: c.dates.map(fmtDate), datasets }, options: opts });
 }
 
 const fmtLongDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -484,8 +528,13 @@ function renderActivities(acts) {
 }
 
 // ---------- tabs ----------
-const TABS = ["overview", "training", "recovery", "performance", "activities"];
-const tabFromHash = () => { const t = location.hash.slice(1); return TABS.includes(t) ? t : "overview"; };
+const TABS = ["overview", "training", "recovery", "progress", "activities"];
+const RENAMED_TABS = { performance: "progress" };  // old links keep working
+function tabFromHash() {
+  let t = location.hash.slice(1);
+  if (RENAMED_TABS[t]) { t = RENAMED_TABS[t]; history.replaceState(null, "", `#${t}`); }
+  return TABS.includes(t) ? t : "overview";
+}
 
 // A tab with nothing recorded is hidden, like an empty chart.
 function updateTabs() {

@@ -17,7 +17,7 @@ and you don't need an API key.
 
 ![Overview tab with insights, training readiness and weekly training time](docs/screenshots/dashboard.png)
 
-The dashboard is split into Overview, Training, Recovery, Performance and Activities tabs:
+The dashboard is split into Overview, Training, Recovery, Progress and Activities tabs:
 
 ![Switching between the dashboard tabs](docs/screenshots/tabs.gif)
 

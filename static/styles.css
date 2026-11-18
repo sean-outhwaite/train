@@ -339,10 +339,10 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .insight-grid { grid-template-columns: minmax(0, 1fr); }
   .panel-head { flex-wrap: wrap; }
   .panel { padding: 16px; }
-  #kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #kpis .kpi + .kpi { border-left: 0; }
-  #kpis .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
-  #kpis .kpi .value { font-size: 26px; }
+  #kpis, #year-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #kpis .kpi + .kpi, #year-tiles .kpi + .kpi { border-left: 0; }
+  #kpis .kpi:nth-child(even), #year-tiles .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
+  #kpis .kpi .value, #year-tiles .kpi .value { font-size: 26px; }
 }
 /* Training readiness: this morning's score and what's behind it, above the trend. */
 .chart-card.full { grid-column: 1 / -1; }
@@ -362,7 +362,10 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 @media (max-width: 760px) { .readiness-now { grid-template-columns: minmax(0, 1fr); } }
 
 #bench-tiles { margin-bottom: 12px; }
-.gear-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+/* Gear sits above the activity log as a strip of small cards, so a long log can't bury it. */
+.gear-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
+.gear-item { padding: 10px 14px; background: var(--surface-2); border-radius: 10px; }
 .gear-item .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .gear-item .name { font-weight: 600; }
 .gear-item .muted { font-size: 12.5px; }
@@ -371,9 +374,11 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .gear-item.warn .fill { background: var(--serious); }
 .gear-item .flag { color: var(--serious); font-weight: 600; font-size: 12.5px; }
 
-#race-preds { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 6px; }
-#race-preds .kpi + .kpi { border-left: 0; }
-#race-preds .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
+@media (max-width: 860px) {
+  #race-preds { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 6px; }
+  #race-preds .kpi + .kpi { border-left: 0; }
+  #race-preds .kpi:nth-child(even) { border-left: 1px solid var(--board-rule); }
+}
 
 /* Tabs are stops on one line, like a route map. One line runs between the end stops, its pink part
    grows to the current stop, and a small train rides along it. app.js sets the positions in pixels. */
@@ -441,3 +446,12 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .tab .name { font-size: 11.5px; }
   .tab .jp { display: none; }
 }
+
+/* This year: board of totals, then the split by sport beside the cumulative chart. */
+.year-tiles { margin-bottom: 14px; }
+.year-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; align-items: start; }
+.year-chart { margin: 0; }
+.year-chart figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.year-chart figcaption h3 { margin: 0; font-size: 15px; }
+.year-chart figcaption .muted { font-size: 12px; }
+@media (max-width: 860px) { .year-body { grid-template-columns: minmax(0, 1fr); } }
