@@ -325,7 +325,6 @@ function renderRecords(records) {
 function renderGear(g) {
   const items = g?.active || [];
   $("#gear-card").hidden = !items.length;
-  $("#gear-note").textContent = "distance logged in Garmin" + (g?.retired ? ` · ${g.retired} retired` : "");
   $("#gear-list").innerHTML = items.map((i) => {
     const km = fmtNum((i.distance_m || 0) / 1000, 0);
     const since = i.date_begin ? ` · since ${fmtLongDate(i.date_begin)}` : "";

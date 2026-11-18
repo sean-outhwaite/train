@@ -279,12 +279,12 @@ RETIRE_WARN = 0.9  # warn once gear reaches this share of its retirement distanc
 
 
 def gear(conn: sqlite3.Connection) -> dict:
-    """Active gear, most used first, and how many items are retired."""
+    """Active gear, most used first. Retired gear is left out."""
     rows = [dict(r) for r in conn.execute("SELECT * FROM gear ORDER BY distance_m DESC")]
     active = [_present({**r, "worn": round(r["distance_m"] / r["max_m"], 3) if r["max_m"] and r["distance_m"] else None,
                         "warn": bool(r["max_m"] and (r["distance_m"] or 0) >= RETIRE_WARN * r["max_m"])})
               for r in rows if r["status"] != "retired"]
-    return {"active": active, "retired": sum(r["status"] == "retired" for r in rows)}
+    return {"active": active}
 
 
 def weekly_volume(conn: sqlite3.Connection, weeks: int = 16) -> dict:

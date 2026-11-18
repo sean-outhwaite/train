@@ -224,7 +224,7 @@ def test_gear_warns_near_retirement(conn):
     ])
     g = metrics.gear(conn)
     assert [(i["name"], i["warn"]) for i in g["active"]] == [("No limit", False), ("Worn", True), ("New", False)]
-    assert g["active"][1]["worn"] == 0.92 and g["retired"] == 1
+    assert g["active"][1]["worn"] == 0.92
 
 
 def test_activity_extras_hide_a_single_lap(conn):
