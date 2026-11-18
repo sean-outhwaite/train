@@ -369,6 +369,7 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .gear-item { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 12.5px;
   background: var(--surface-2); border-radius: 999px; cursor: default; }
 .gear-item .name { font-weight: 500; }
+.gear-icon { width: 16px; height: 16px; flex: none; margin-right: -2px; color: var(--text-muted); align-self: center; }
 .gear-item .km { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .gear-item .track { width: 40px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .gear-item .fill { display: block; height: 100%; border-radius: 3px; background: var(--series-1); }

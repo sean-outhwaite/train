@@ -321,6 +321,20 @@ function renderRecords(records) {
   }).join("");
 }
 
+// Small line icons for the gear types Garmin uses. Other types get none rather than a guess.
+const GEAR_ICONS = {
+  // A low-cut runner, tipped forward onto the toe with the heel lifted, as if mid-stride.
+  shoe: '<g transform="rotate(30 12 13)"><path d="M3 18h18v-1.4a2.4 2.4 0 0 0-1.9-2.35L14 13l-4-3.2q-2.5 2-5.5.7Q3 13 3 15.5z"/><path d="M10.6 11.5l1.3-1.1M12 12.6l1.3-1.1M3 15.8h18"/></g>',
+  bike: '<circle cx="5.5" cy="15.5" r="3.5"/><circle cx="18.5" cy="15.5" r="3.5"/><path d="M5.5 15.5L9 8.5l3 7h-6.5M9 8.5h6.5l3 7M12 15.5l3.5-7M7.5 7.5h3M14.5 6.5h2.5"/>',
+};
+function gearIcon(type) {
+  const t = (type || "").toLowerCase();
+  const key = t.includes("shoe") ? "shoe" : t.includes("bike") || t.includes("bicycle") ? "bike" : null;
+  if (!key) return "";
+  return `<svg class="gear-icon" viewBox="0 0 24 24" role="img" aria-label="${escapeHtml(type)}" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${GEAR_ICONS[key]}</svg>`;
+}
+
 // Active gear as a slim row of chips above the activity log: distance, plus a small bar against the
 // retirement distance when one is set in Garmin. The rest of the detail is in the tooltip.
 function renderGear(g) {
@@ -333,10 +347,12 @@ function renderGear(g) {
     const over = i.max_m && i.distance_m > i.max_m ? (i.distance_m - i.max_m) / 1000 : 0;
     const flag = !i.warn ? "" : over ? `${fmtNum(over, 0)} km over` : `${Math.round(i.worn * 100)}% worn`;
     const flagNote = !i.warn ? "" : over ? "past retirement distance" : "close to retirement distance";
-    const detail = [i.type, i.activities && `${i.activities} activit${i.activities === 1 ? "y" : "ies"}`, i.date_begin && `since ${fmtLongDate(i.date_begin)}`, flagNote]
+    const icon = gearIcon(i.type);
+    // The icon already says the type, so the tooltip only names types without one.
+    const detail = [!icon && i.type, i.activities && `${i.activities} activit${i.activities === 1 ? "y" : "ies"}`, i.date_begin && `since ${fmtLongDate(i.date_begin)}`, flagNote]
       .filter(Boolean).join(" · ");
     return `<li class="gear-item${i.warn ? " warn" : ""}" title="${escapeHtml(detail)}">
-      <span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
+      ${icon}<span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
       <span class="km">${km}${of} km</span>
       ${i.max_m ? `<span class="track" aria-hidden="true"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></span>` : ""}
       ${flag ? `<span class="flag">${flag}</span>` : ""}
