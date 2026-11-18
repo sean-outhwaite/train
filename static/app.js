@@ -202,6 +202,50 @@ function renderCharts(d) {
   renderRacePredictions(d.daily);
   renderBenchmarks(d.benchmarks);
   renderGear(d.gear);
+  renderYear(d.year);
+}
+
+// Calendar year to date. Tiles compare with the same dates last year; zero totals are hidden as not recorded.
+function renderYear(y) {
+  $("#year-card").hidden = !y;
+  if (!y) return;
+  $("#year-title").textContent = `This year · ${y.year}`;
+  $("#year-note").textContent = `1 January to ${fmtLongDate(y.through)}` + (y.previous ? ", against the same dates last year" : "");
+  const tiles = [
+    ["hours", "Training time", "h", 1], ["distance_km", "Distance", "km", 0], ["elev_m", "Elevation gain", "m", 0],
+    ["activities", "Activities", "", 0], ["active_days", "Active days", "", 0],
+  ].filter(([key]) => y.totals[key]).map(([key, label, unit, digits]) => {
+    const prev = y.previous?.[key];
+    let delta = "";  // the note already says when there's nothing to compare with
+    if (prev) {
+      const pct = Math.round((y.totals[key] / prev - 1) * 100);
+      delta = pct === 0 ? "■ same as last year" : `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs last year`;
+    }
+    return `<div class="kpi"><div class="label">${label}</div>
+      <div class="value">${fmtNum(y.totals[key], digits)}${unit ? `<small>${unit}</small>` : ""}</div>
+      <div class="delta" title="${prev ? `${fmtNum(prev, digits)} ${unit} by ${fmtLongDate(y.previous_through)}` : ""}">${delta}</div></div>`;
+  }).join("");
+  $("#year-tiles").innerHTML = tiles;
+
+  // Columns appear only when some sport recorded them.
+  const cols = [
+    ["Activities", (s) => s.activities && fmtNum(s.activities, 0)],
+    ["Time", (s) => s.hours && `${fmtNum(s.hours, 1)} h`],
+    ["Distance", (s) => s.distance_km && `${fmtNum(s.distance_km, 0)} km`],
+    ["Elevation", (s) => s.elev_m && `${fmtNum(s.elev_m, 0)} m`],
+    ["Longest", (s) => s.longest_km && `${fmtNum(s.longest_km, 1)} km`],
+  ].filter(([, get]) => y.sports.some(get));
+  $("#year-sports").innerHTML = `<thead><tr><th>Sport</th>${cols.map(([h]) => `<th class="num">${h}</th>`).join("")}</tr></thead>
+    <tbody>${y.sports.map((s) => `<tr><td><span class="pill"><span class="dot" style="background:${sportColor(s.sport)}"></span>${escapeHtml(titleCase(s.sport))}</span></td>
+      ${cols.map(([, get]) => `<td class="num">${get(s) || "–"}</td>`).join("")}</tr>`).join("")}</tbody>`;
+
+  const c = y.cumulative;
+  const datasets = [line(String(y.year), c.hours, css("--series-1"))];
+  if (c.previous_hours) datasets.push(line(String(y.year - 1), c.previous_hours, withAlpha(css("--text-muted"), 0.7), { borderDash: [5, 4] }));
+  const opts = baseOptions({ unit: "h" });
+  if (datasets.length === 1) opts.plugins.legend.display = false;
+  $("#year-chart-note").textContent = c.previous_hours ? "hours, this year against last" : "hours";
+  draw("c-year", { data: { labels: c.dates.map(fmtDate), datasets }, options: opts });
 }
 
 const fmtLongDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -277,20 +321,41 @@ function renderRecords(records) {
   }).join("");
 }
 
-// Active gear by distance; a bar against the retirement distance when one is set in Garmin.
+// Small line icons for the gear types Garmin uses. Other types get none rather than a guess.
+const GEAR_ICONS = {
+  // A low-cut runner, tipped forward onto the toe with the heel lifted, as if mid-stride.
+  shoe: '<g transform="rotate(30 12 13)"><path d="M3 18h18v-1.4a2.4 2.4 0 0 0-1.9-2.35L14 13l-4-3.2q-2.5 2-5.5.7Q3 13 3 15.5z"/><path d="M10.6 11.5l1.3-1.1M12 12.6l1.3-1.1M3 15.8h18"/></g>',
+  bike: '<circle cx="5.5" cy="15.5" r="3.5"/><circle cx="18.5" cy="15.5" r="3.5"/><path d="M5.5 15.5L9 8.5l3 7h-6.5M9 8.5h6.5l3 7M12 15.5l3.5-7M7.5 7.5h3M14.5 6.5h2.5"/>',
+};
+function gearIcon(type) {
+  const t = (type || "").toLowerCase();
+  const key = t.includes("shoe") ? "shoe" : t.includes("bike") || t.includes("bicycle") ? "bike" : null;
+  if (!key) return "";
+  return `<svg class="gear-icon" viewBox="0 0 24 24" role="img" aria-label="${escapeHtml(type)}" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${GEAR_ICONS[key]}</svg>`;
+}
+
+// Active gear as a slim row of chips above the activity log: distance, plus a small bar against the
+// retirement distance when one is set in Garmin. The rest of the detail is in the tooltip.
 function renderGear(g) {
   const items = g?.active || [];
   $("#gear-card").hidden = !items.length;
-  $("#gear-note").textContent = "distance logged in Garmin" + (g?.retired ? ` · ${g.retired} retired` : "");
   $("#gear-list").innerHTML = items.map((i) => {
     const km = fmtNum((i.distance_m || 0) / 1000, 0);
-    const since = i.date_begin ? ` · since ${fmtLongDate(i.date_begin)}` : "";
-    return `<li class="gear-item${i.warn ? " warn" : ""}">
-      <div class="top"><span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
-        <span>${km} km${i.max_m ? ` <span class="muted">of ${fmtNum(i.max_m / 1000, 0)} km</span>` : ""}</span></div>
-      <div class="top"><span class="muted">${escapeHtml(i.type || "")}${i.activities ? ` · ${i.activities} activities` : ""}${since}</span>
-        ${i.warn ? `<span class="flag">${i.worn >= 1 ? "Past its retirement distance" : "Nearly due for retirement"}</span>` : ""}</div>
-      ${i.max_m ? `<div class="track"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></div>` : ""}
+    const of = i.max_m ? ` / ${fmtNum(i.max_m / 1000, 0)}` : "";
+    // The flag states how worn it is, not what to do: there's nothing to act on in the app.
+    const over = i.max_m && i.distance_m > i.max_m ? (i.distance_m - i.max_m) / 1000 : 0;
+    const flag = !i.warn ? "" : over ? `${fmtNum(over, 0)} km over` : `${Math.round(i.worn * 100)}% worn`;
+    const flagNote = !i.warn ? "" : over ? "past retirement distance" : "close to retirement distance";
+    const icon = gearIcon(i.type);
+    // The icon already says the type, so the tooltip only names types without one.
+    const detail = [!icon && i.type, i.activities && `${i.activities} activit${i.activities === 1 ? "y" : "ies"}`, i.date_begin && `since ${fmtLongDate(i.date_begin)}`, flagNote]
+      .filter(Boolean).join(" · ");
+    return `<li class="gear-item${i.warn ? " warn" : ""}" title="${escapeHtml(detail)}">
+      ${icon}<span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
+      <span class="km">${km}${of} km</span>
+      ${i.max_m ? `<span class="track" aria-hidden="true"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></span>` : ""}
+      ${flag ? `<span class="flag">${flag}</span>` : ""}
     </li>`;
   }).join("");
 }
@@ -484,8 +549,13 @@ function renderActivities(acts) {
 }
 
 // ---------- tabs ----------
-const TABS = ["overview", "training", "recovery", "performance", "activities"];
-const tabFromHash = () => { const t = location.hash.slice(1); return TABS.includes(t) ? t : "overview"; };
+const TABS = ["overview", "training", "recovery", "progress", "activities"];
+const RENAMED_TABS = { performance: "progress" };  // old links keep working
+function tabFromHash() {
+  let t = location.hash.slice(1);
+  if (RENAMED_TABS[t]) { t = RENAMED_TABS[t]; history.replaceState(null, "", `#${t}`); }
+  return TABS.includes(t) ? t : "overview";
+}
 
 // A tab with nothing recorded is hidden, like an empty chart.
 function updateTabs() {

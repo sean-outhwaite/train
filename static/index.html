@@ -90,7 +90,7 @@
         <a class="tab" role="tab" id="tabbtn-overview" href="#overview" aria-controls="tab-overview" data-tab="overview"><span class="stop" aria-hidden="true">T01</span><span class="name">Overview</span><span class="jp" lang="ja" aria-hidden="true">概要</span></a>
         <a class="tab" role="tab" id="tabbtn-training" href="#training" aria-controls="tab-training" data-tab="training"><span class="stop" aria-hidden="true">T02</span><span class="name">Training</span><span class="jp" lang="ja" aria-hidden="true">練習</span></a>
         <a class="tab" role="tab" id="tabbtn-recovery" href="#recovery" aria-controls="tab-recovery" data-tab="recovery"><span class="stop" aria-hidden="true">T03</span><span class="name">Recovery</span><span class="jp" lang="ja" aria-hidden="true">回復</span></a>
-        <a class="tab" role="tab" id="tabbtn-performance" href="#performance" aria-controls="tab-performance" data-tab="performance"><span class="stop" aria-hidden="true">T04</span><span class="name">Performance</span><span class="jp" lang="ja" aria-hidden="true">記録</span></a>
+        <a class="tab" role="tab" id="tabbtn-progress" href="#progress" aria-controls="tab-progress" data-tab="progress"><span class="stop" aria-hidden="true">T04</span><span class="name">Progress</span><span class="jp" lang="ja" aria-hidden="true">進歩</span></a>
         <a class="tab" role="tab" id="tabbtn-activities" href="#activities" aria-controls="tab-activities" data-tab="activities"><span class="stop" aria-hidden="true">T05</span><span class="name">Activities</span><span class="jp" lang="ja" aria-hidden="true">運行</span></a>
       </nav>
 
@@ -192,7 +192,22 @@
       </div>
     </section>
 
-    <section class="tab-panel" id="tab-performance" role="tabpanel" aria-labelledby="tabbtn-performance" hidden>
+    <section class="tab-panel" id="tab-progress" role="tabpanel" aria-labelledby="tabbtn-progress" hidden>
+      <section class="panel" id="year-card" hidden>
+        <div class="panel-head"><div>
+          <h2><span id="year-title">This year</span><span class="section-jp" lang="ja">今年 <span lang="en">YEAR</span></span></h2>
+          <p class="muted" id="year-note">Calendar year to date, against the same dates last year</p>
+        </div></div>
+        <div class="kpis year-tiles" id="year-tiles" data-board="年間  YEAR TO DATE"></div>
+        <div class="year-body">
+          <div class="table-wrap"><table id="year-sports" class="year-sports"></table></div>
+          <figure class="year-chart">
+            <figcaption><h3>Cumulative training time</h3><span class="muted" id="year-chart-note">hours</span></figcaption>
+            <div class="chart-box"><canvas id="c-year"></canvas></div>
+          </figure>
+        </div>
+      </section>
+
       <section class="panel" id="records-card" hidden>
         <div class="panel-head"><div>
           <h2>Personal records<span class="section-jp" lang="ja">自己ベスト <span lang="en">BEST</span></span></h2>
@@ -206,13 +221,9 @@
           <figcaption><h3>Thresholds</h3><span class="muted">Garmin's latest thresholds, against a year ago</span></figcaption>
           <div class="kpis" id="bench-tiles" data-board="基準  THRESHOLDS"></div>
         </figure>
-        <figure class="panel chart-card" id="race-card">
+        <figure class="panel chart-card full" id="race-card">
           <figcaption><h3>Race predictions</h3><span class="muted" id="race-note">from Garmin</span></figcaption>
           <div class="kpis" id="race-preds" data-board="到着予定  ARRIVALS"></div>
-        </figure>
-        <figure class="panel chart-card" id="gear-card" hidden>
-          <figcaption><h3>Gear</h3><span class="muted" id="gear-note">distance logged in Garmin</span></figcaption>
-          <ul class="gear-list" id="gear-list"></ul>
         </figure>
       </div>
     </section>
@@ -225,6 +236,10 @@
             <p class="muted" id="acts-note"></p>
           </div>
           <div class="chips" id="sport-filter" role="group" aria-label="Filter by sport"></div>
+        </div>
+        <div class="gear-row" id="gear-card" hidden>
+          <span class="gear-label" title="Active gear, distance logged in Garmin">Gear</span>
+          <ul class="gear-list" id="gear-list" aria-label="Active gear"></ul>
         </div>
         <div class="table-wrap"><table id="acts" class="acts"></table></div>
       </section>

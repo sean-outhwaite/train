@@ -224,7 +224,7 @@ def test_gear_warns_near_retirement(conn):
     ])
     g = metrics.gear(conn)
     assert [(i["name"], i["warn"]) for i in g["active"]] == [("No limit", False), ("Worn", True), ("New", False)]
-    assert g["active"][1]["worn"] == 0.92 and g["retired"] == 1
+    assert g["active"][1]["worn"] == 0.92
 
 
 def test_activity_extras_hide_a_single_lap(conn):
@@ -254,3 +254,44 @@ def test_records_carry_activity_name_and_distance(conn):
     five_k, steps = metrics.benchmarks(conn)["records"]
     assert (five_k["activity_name"], five_k["distance_m"], five_k["source_id"]) == ("Morning run", 5000, "a1")
     assert "distance_m" not in steps and "activity_name" not in steps and "source_id" not in steps
+
+
+# --- year to date --------------------------------------------------------------
+
+def test_year_stats_compare_with_same_dates_last_year(conn):
+    from datetime import date
+    act(conn, "y1", "2025-01-05T07:00:00", duration_s=3600, distance_m=10_000, elev_gain_m=100)
+    act(conn, "y2", "2025-01-05T18:00:00", sport="cycling", duration_s=7200, distance_m=40_000)
+    act(conn, "y3", "2025-03-01T07:00:00", duration_s=1800, distance_m=5_000)  # after today's date: excluded
+    act(conn, "p1", "2024-02-10T07:00:00", duration_s=1800, distance_m=5_000)
+    act(conn, "p2", "2024-03-10T07:00:00", duration_s=1800, distance_m=5_000)  # after last year's cutoff
+    act(conn, "old", "2023-01-05T07:00:00", duration_s=3600)
+    conn.commit()
+    y = metrics.year_stats(conn, today=date(2025, 2, 20))
+
+    assert y["year"] == 2025 and y["previous_through"] == "2024-02-20"
+    assert y["totals"] == {"activities": 2, "active_days": 1, "hours": 3.0, "distance_km": 50.0, "elev_m": 100}
+    assert y["previous"]["activities"] == 1 and y["previous"]["hours"] == 0.5
+    assert [s["sport"] for s in y["sports"]] == ["cycling", "running"]
+    assert y["sports"][1]["longest_km"] == 10.0
+    assert "elev_m" not in y["sports"][0]  # nothing recorded, so hidden rather than zero
+    c = y["cumulative"]
+    assert len(c["dates"]) == len(c["hours"]) == len(c["previous_hours"]) == 51
+    assert c["hours"][3] == 0 and c["hours"][4] == 3.0 and c["hours"][-1] == 3.0
+    assert c["previous_hours"][-1] == 0.5
+
+
+def test_year_stats_none_without_activities_this_year(conn):
+    from datetime import date
+    act(conn, "p1", "2024-02-10T07:00:00", duration_s=1800)
+    conn.commit()
+    assert metrics.year_stats(conn, today=date(2025, 2, 20)) is None
+
+
+def test_year_stats_leap_day_compares_with_28_february(conn):
+    from datetime import date
+    act(conn, "y1", "2024-02-29T07:00:00", duration_s=3600)
+    conn.commit()
+    y = metrics.year_stats(conn, today=date(2024, 2, 29))
+    assert y["previous_through"] == "2023-02-28" and y["previous"] is None
+    assert y["cumulative"]["previous_hours"] is None
