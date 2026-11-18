@@ -229,14 +229,6 @@
     </section>
 
     <section class="tab-panel" id="tab-activities" role="tabpanel" aria-labelledby="tabbtn-activities" hidden>
-      <section class="panel" id="gear-card" hidden>
-        <div class="panel-head"><div>
-          <h2>Gear<span class="section-jp" lang="ja">装備 <span lang="en">KIT</span></span></h2>
-          <p class="muted">Distance logged in Garmin</p>
-        </div></div>
-        <ul class="gear-list" id="gear-list"></ul>
-      </section>
-
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -244,6 +236,10 @@
             <p class="muted" id="acts-note"></p>
           </div>
           <div class="chips" id="sport-filter" role="group" aria-label="Filter by sport"></div>
+        </div>
+        <div class="gear-row" id="gear-card" hidden>
+          <span class="gear-label" title="Active gear, distance logged in Garmin">Gear</span>
+          <ul class="gear-list" id="gear-list" aria-label="Active gear"></ul>
         </div>
         <div class="table-wrap"><table id="acts" class="acts"></table></div>
       </section>

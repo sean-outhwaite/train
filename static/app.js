@@ -321,19 +321,25 @@ function renderRecords(records) {
   }).join("");
 }
 
-// Active gear by distance; a bar against the retirement distance when one is set in Garmin.
+// Active gear as a slim row of chips above the activity log: distance, plus a small bar against the
+// retirement distance when one is set in Garmin. The rest of the detail is in the tooltip.
 function renderGear(g) {
   const items = g?.active || [];
   $("#gear-card").hidden = !items.length;
   $("#gear-list").innerHTML = items.map((i) => {
     const km = fmtNum((i.distance_m || 0) / 1000, 0);
-    const since = i.date_begin ? ` · since ${fmtLongDate(i.date_begin)}` : "";
-    return `<li class="gear-item${i.warn ? " warn" : ""}">
-      <div class="top"><span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
-        <span>${km} km${i.max_m ? ` <span class="muted">of ${fmtNum(i.max_m / 1000, 0)} km</span>` : ""}</span></div>
-      <div class="top"><span class="muted">${escapeHtml(i.type || "")}${i.activities ? ` · ${i.activities} activities` : ""}${since}</span>
-        ${i.warn ? `<span class="flag">${i.worn >= 1 ? "Past its retirement distance" : "Nearly due for retirement"}</span>` : ""}</div>
-      ${i.max_m ? `<div class="track"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></div>` : ""}
+    const of = i.max_m ? ` / ${fmtNum(i.max_m / 1000, 0)}` : "";
+    // The flag states how worn it is, not what to do: there's nothing to act on in the app.
+    const over = i.max_m && i.distance_m > i.max_m ? (i.distance_m - i.max_m) / 1000 : 0;
+    const flag = !i.warn ? "" : over ? `${fmtNum(over, 0)} km over` : `${Math.round(i.worn * 100)}% worn`;
+    const flagNote = !i.warn ? "" : over ? "past retirement distance" : "close to retirement distance";
+    const detail = [i.type, i.activities && `${i.activities} activit${i.activities === 1 ? "y" : "ies"}`, i.date_begin && `since ${fmtLongDate(i.date_begin)}`, flagNote]
+      .filter(Boolean).join(" · ");
+    return `<li class="gear-item${i.warn ? " warn" : ""}" title="${escapeHtml(detail)}">
+      <span class="name">${escapeHtml(i.name || i.type || "Gear")}</span>
+      <span class="km">${km}${of} km</span>
+      ${i.max_m ? `<span class="track" aria-hidden="true"><span class="fill" style="width: ${Math.min(100, (i.worn || 0) * 100)}%"></span></span>` : ""}
+      ${flag ? `<span class="flag">${flag}</span>` : ""}
     </li>`;
   }).join("");
 }
