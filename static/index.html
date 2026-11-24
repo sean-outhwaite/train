@@ -284,8 +284,12 @@
           <h2 id="act-title"></h2>
           <p class="muted" id="act-meta"></p>
         </div>
-        <form method="dialog"><button class="btn ghost" aria-label="Close">✕</button></form>
+        <div class="act-actions">
+          <button class="btn" id="btn-act-summary" title="Uses your Claude plan">Summarise</button>
+          <form method="dialog"><button class="btn ghost" aria-label="Close">✕</button></form>
+        </div>
       </header>
+      <section class="act-summary msg assistant" id="act-summary" aria-live="polite" hidden></section>
       <div class="kpis" id="act-tiles" data-board="記録  RESULT"></div>
       <figure class="panel chart-card" id="act-map-card">
         <figcaption><h3>Route</h3><span class="muted" id="act-map-note"></span></figcaption>
@@ -311,6 +315,6 @@
 
   <div id="tip" class="tip" role="tooltip" hidden></div>
 
-  <script src="/static/app.js?v=22"></script>
+  <script src="/static/app.js?v=23"></script>
 </body>
 </html>

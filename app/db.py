@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE TABLE IF NOT EXISTS claude_runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    kind            TEXT NOT NULL,          -- chat, insights, discover
+    kind            TEXT NOT NULL,          -- chat, insights, activity, discover
     conversation_id TEXT,
     status          TEXT NOT NULL DEFAULT 'running',
     input_tokens    INTEGER,                -- includes cache reads and writes
