@@ -9,6 +9,7 @@ let sending = false;
 let discoverTried = false;
 let activityData = null;
 let routeMap = null;
+const activitySummaries = new Map(); // source_id -> summary text, kept until the page reloads
 
 // Colour follows the entity: each sport keeps its slot no matter which sports are present.
 const SPORT_SLOT = { running: 1, cycling: 2, strength: 3, swimming: 4, walking: 5, other: 6 };
@@ -772,8 +773,51 @@ async function openActivity(id) {
   dialog.scrollTop = 0;
   $("#act-laps-card").hidden = true;  // until this activity's laps arrive
   renderActivity(activityData);
+  showSummary(activityData);
   if (activityData.has_route) loadRoute(activityData);
   loadExtras(activityData);
+}
+
+// The summary isn't saved, so it lasts until the page reloads.
+function showSummary(a) {
+  const box = $("#act-summary"), btn = $("#btn-act-summary");
+  const text = activitySummaries.get(a.source_id);
+  box.hidden = !text;
+  if (text) renderMarkdown(box, text);
+  btn.hidden = Boolean(text);
+  btn.disabled = sending;
+}
+
+async function summariseActivity() {
+  const a = activityData, btn = $("#btn-act-summary"), box = $("#act-summary");
+  if (!a || sending) return;
+  sending = true;  // shares chat's flag: one Claude run at a time
+  btn.disabled = true;
+  btn.textContent = "Summarising…";
+  box.hidden = false;
+  box.innerHTML = `<div class="status">Reading the activity…</div>`;
+  let text = "", failure = null;
+  const current = () => a === activityData && $("#activity-dialog").open;
+  try {
+    const res = await fetch(`/api/activities/${encodeURIComponent(a.source_id)}/summary`, { method: "POST" });
+    await readSSE(res, (event, data) => {
+      if (event === "text") text += data.delta;
+      else if (event === "error") failure = data.message;
+      if (!current()) return;
+      if (event === "text") renderMarkdown(box, text);
+      else if (event === "status" && !text) box.querySelector(".status").textContent = data.text;
+    });
+    if (!text) throw new Error(failure || "Claude returned no summary");
+    activitySummaries.set(a.source_id, text);
+  } catch (e) {
+    if (current()) box.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
+  } finally {
+    sending = false;
+    btn.textContent = "Summarise";
+    if (current() && activitySummaries.has(a.source_id)) showSummary(a);
+    else btn.disabled = false;
+    loadStatus();
+  }
 }
 
 async function loadExtras(a) {
@@ -1099,6 +1143,7 @@ $(".tabs").addEventListener("keydown", (e) => {
   next.focus();
   next.click();
 });
+$("#btn-act-summary").addEventListener("click", summariseActivity);
 $("#activity-dialog").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) e.currentTarget.close();
 });

@@ -314,6 +314,11 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .activity-dialog .panel { box-shadow: none; padding: 0; }
 .act-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; border-bottom: 3px solid var(--stripe); }
 .act-head p { margin: 2px 0 0; }
+.act-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.act-actions .btn[hidden] { display: none; }
+.act-summary { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 8px 8px 0; }
+.act-summary > :last-child { margin-bottom: 0; }
+.act-summary .status { margin: 0; }
 .act-zones { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .act-chart { height: 170px; }
 .act-map { height: 280px; border-radius: 12px; overflow: hidden; isolation: isolate; background: var(--surface-2); font: inherit; }
