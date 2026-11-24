@@ -349,6 +349,9 @@ def sync(days: int | None = None, interactive: bool = False, log=print) -> dict:
         start = today - timedelta(days=days)
 
     acts = g.get_activities_by_date(start.isoformat(), today.isoformat())
+    # The window overlaps the last sync, so count only activities the database didn't have yet.
+    known = {r[0] for r in conn.execute("SELECT source_id FROM activities")}
+    new = sum(f"garmin-{a['activityId']}" not in known for a in acts)
     for a in acts:
         db.upsert_activity(conn, _activity_row(a))
     conn.commit()
@@ -386,7 +389,7 @@ def sync(days: int | None = None, interactive: bool = False, log=print) -> dict:
             log(f"wellness: {i + 1}/{n} days")
     db.set_meta(conn, "garmin_synced_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     conn.commit()
-    return {"activities": len(acts), "days": n, "from": start.isoformat()}
+    return {"activities": len(acts), "new_activities": new, "days": n, "from": start.isoformat()}
 
 
 if __name__ == "__main__":

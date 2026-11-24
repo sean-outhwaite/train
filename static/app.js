@@ -1064,7 +1064,7 @@ async function sendMessage(text) {
 let bannerTimer = null;
 function showBanner(html, { autoHide = false } = {}) {
   clearTimeout(bannerTimer);
-  $("#banner").innerHTML = html;
+  $("#banner-text").innerHTML = html;
   $("#banner").hidden = false;
   // Success notes clear themselves; problems stay until something replaces them.
   if (autoHide) bannerTimer = setTimeout(() => ($("#banner").hidden = true), 8000);
@@ -1144,6 +1144,10 @@ $(".tabs").addEventListener("keydown", (e) => {
   next.click();
 });
 $("#btn-act-summary").addEventListener("click", summariseActivity);
+// The banner floats over the page, so it can be dismissed, and a link in it closes it once followed.
+$("#banner").addEventListener("click", (e) => {
+  if (e.target.closest(".banner-close, a")) { clearTimeout(bannerTimer); $("#banner").hidden = true; }
+});
 $("#activity-dialog").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) e.currentTarget.close();
 });
@@ -1214,7 +1218,10 @@ $("#btn-sync").addEventListener("click", async (e) => {
   e.target.textContent = "Syncing…";
   try {
     const r = await api("/api/garmin/sync", { method: "POST" });
-    showBanner(`Garmin sync done: ${r.activities} activities, ${r.days} days since ${r.from}.`, { autoHide: true });
+    const newActs = r.new_activities
+      ? ` <a href="#activities">${r.new_activities} new ${r.new_activities === 1 ? "activity" : "activities"}<span class="arrow" aria-hidden="true">→</span></a>`
+      : "";
+    showBanner(`Garmin sync done: ${r.activities} activities, ${r.days} days since ${r.from}.${newActs}`, { autoHide: true });
     await Promise.all([loadDashboard(), loadStatus()]);
   } catch (err) {
     showBanner(`<b>Garmin sync:</b> ${escapeHtml(err.message)}`);

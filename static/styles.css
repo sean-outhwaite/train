@@ -148,8 +148,15 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .btn.sign:active { transform: translateY(1px); }
 .btn.sign.accent { background: var(--sign-accent); color: var(--sign-accent-ink); }
 
-.banner { margin: 16px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--surface-2);
-  border-left: 4px solid var(--warning); }
+/* Floats over the page so showing or hiding it doesn't move anything. */
+.banner { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 25;
+  width: max-content; max-width: min(640px, calc(100vw - 32px)); display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 8px 10px 14px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 4px solid var(--warning); box-shadow: 0 12px 32px -12px rgb(15 27 45 / .45); }
+.banner[hidden] { display: none; }
+.banner-close { flex: none; border: 0; background: none; color: inherit; font-size: 18px; line-height: 1;
+  padding: 2px 6px; border-radius: 4px; cursor: pointer; opacity: .7; }
+.banner-close:hover { opacity: 1; background: var(--surface-1); }
 .layout { padding: 20px 24px 48px; max-width: 1400px; margin: 0 auto; }
 .empty { text-align: center; padding: 80px 16px; }
 
@@ -337,7 +344,7 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
   .grid { grid-template-columns: minmax(0, 1fr); }
   .topbar { padding: 10px 16px 18px; }
   .layout { padding-left: 16px; padding-right: 16px; }
-  .banner { margin: 16px 16px 0; }
+  .banner { bottom: 12px; }
   /* Two rows: brand and status, then the buttons. */
   .actions { flex: 1 0 100%; flex-wrap: nowrap; justify-content: space-between; }
   .actions .btn { padding: 6px 10px; font-size: 13px; }

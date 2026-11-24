@@ -174,3 +174,16 @@ def test_gear_row_names_and_distance():
             "dateBegin": "2024-01-01T00:00:00.0", "maximumMeters": 0.0}
     row = gs.gear_row(item, {"totalDistance": 123_000.0, "totalActivities": 20})
     assert (row["name"], row["max_m"], row["distance_m"], row["date_begin"]) == ("Make Model", None, 123_000.0, "2024-01-01")
+
+
+def test_sync_counts_only_new_activities(conn, monkeypatch):
+    acts = [{"activityId": 1, "startTimeLocal": "2024-03-09 07:00:00"},
+            {"activityId": 2, "startTimeLocal": "2024-03-10 07:00:00"}]
+    g = FakeClient()
+    g.get_activities_by_date = lambda a, b: acts
+    monkeypatch.setattr(gs, "client", lambda interactive=False: g)
+    db.upsert_activity(conn, gs._activity_row(acts[0]))
+    conn.commit()
+    r = gs.sync(days=3, log=lambda *_: None)
+    assert (r["activities"], r["new_activities"]) == (2, 1)
+    assert gs.sync(days=3, log=lambda *_: None)["new_activities"] == 0
