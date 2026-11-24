@@ -316,7 +316,9 @@ dialog::backdrop { background: rgb(0 0 0 / .35); }
 .act-head p { margin: 2px 0 0; }
 .act-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .act-actions .btn[hidden] { display: none; }
-.act-summary { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 8px 8px 0; }
+.act-summary { padding: 12px 16px 14px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; }
+.act-summary::before { content: "Claude's summary"; display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted); }
 .act-summary > :last-child { margin-bottom: 0; }
 .act-summary .status { margin: 0; }
 .act-zones { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
